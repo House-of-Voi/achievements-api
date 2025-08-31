@@ -6,8 +6,9 @@
     "description": "Endpoints to list and claim on-chain achievements."
   },
   "servers": [
-    { "url": "http://localhost:3000", "description": "Local" },
-    { "url": "https://achievements.houseofvoi.com", "description": "Prod" }
+    { "url": "https://achievements.houseofvoi.com", "description": "Prod" },
+    { "url": "http://localhost:3000", "description": "Local" }
+    
   ],
   "tags": [{ "name": "achievements" }],
   "paths": {
