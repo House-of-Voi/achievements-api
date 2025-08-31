@@ -33,6 +33,7 @@ function getAppIdFor(id: string): number {
 
 // TODO: replace with your real telemetry/oracle check (casino-wide)
 async function hitMultiplierAtLeast(_account: string, _minX: number): Promise<boolean> {
+  void _account; void _minX
   return false
 }
 

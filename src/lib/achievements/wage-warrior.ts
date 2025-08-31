@@ -32,6 +32,7 @@ function getAppIdFor(id: string): number {
 
 // TODO: replace with your real telemetry check
 async function meetsTotalWagerUSD(_account: string, _thresholdUsd: number): Promise<boolean> {
+  void _account; void _thresholdUsd
   return false
 }
 

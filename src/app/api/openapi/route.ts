@@ -6,7 +6,7 @@ export async function GET() {
   try {
     const json = fs.readFileSync(specPath, 'utf-8')
     return new Response(json, { headers: { 'content-type': 'application/json' } })
-  } catch (e) {
+  } catch {
     return new Response(JSON.stringify({ error: 'openapi.json not found' }), {
       status: 500,
       headers: { 'content-type': 'application/json' },

@@ -83,9 +83,17 @@ export async function GET(req: Request) {
   )
 
   // full display metadata
-  const body = achievements
-    .filter((_, i) => visibility[i])
-    .map((a) => ({
+const body = achievements
+  .filter((_, i) => visibility[i])
+  .map((a) => {
+    const scope =
+      a.display?.scope
+        ? (a.display.scope.kind === 'game'
+            ? { kind: 'game' as const, gameKey: a.display.scope.gameKey, gameName: a.display.scope.gameName }
+            : { kind: 'global' as const })
+        : undefined
+
+    return {
       id: a.id,
       name: a.name,
       description: a.description,
@@ -99,16 +107,11 @@ export async function GET(req: Request) {
             tiersTotal:a.display.tiersTotal,
             order:     a.display.order,
             tags:      a.display.tags,
-            scope:     a.display.scope
-              ? {
-                  kind: a.display.scope.kind,
-                  gameKey:  (a.display.scope as any).gameKey,
-                  gameName: (a.display.scope as any).gameName,
-                }
-              : undefined,
+            scope,
           }
         : undefined,
-    })) satisfies Ok
+    }
+  }) satisfies Ok
 
   // pretty sort
   body.sort((x, y) => {

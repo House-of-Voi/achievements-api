@@ -35,8 +35,8 @@ async function loadAchievements(): Promise<IAchievement[]> {
 
 export async function POST(req: NextRequest) {
   type Body = paths['/api/claim']['post']['requestBody']['content']['application/json']
-  type Ok = paths['/api/claim']['post']['responses']['200']['content']['application/json']
-  type Err = components['schemas']['Error']
+  type Ok   = paths['/api/claim']['post']['responses']['200']['content']['application/json']
+  type Err  = components['schemas']['Error']
 
   const { account } = (await req.json()) as Body
 
@@ -45,19 +45,15 @@ export async function POST(req: NextRequest) {
   }
 
   const achievements = await loadAchievements()
-
   const result: Ok = { minted: [], errors: [] }
 
   for (const ach of achievements) {
     try {
       if (!ach.enabled) continue
-
       const appId = ach.getContractAppId()
       const assetId = await utils.getSBTAssetId(appId)
-
       if (await utils.hasAchievement(account, assetId)) continue
       if (!(await ach.checkRequirement(account))) continue
-
       const txnId = await ach.mint(account)
       result.minted.push({ id: ach.id, txnId })
     } catch (e) {
@@ -66,7 +62,5 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Compile-time check that the shape matches the spec
-  const _ = result satisfies Ok
   return NextResponse.json(result)
 }
