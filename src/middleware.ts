@@ -1,49 +1,43 @@
 // src/middleware.ts
 import { NextResponse, type NextRequest } from 'next/server'
 
-const ALLOWED_ORIGINS = [
-  'http://localhost:3000',
-  'https://achievements.houseofvoi.com',
-  'https://achievements-api.vercel.app'
-]
-
-// Compute the Access-Control-Allow-Origin per request
-function allowOrigin(req: NextRequest): string {
-  const origin = req.headers.get('origin')
-  if (origin && ALLOWED_ORIGINS.includes(origin)) return origin
-  // If you truly want to allow any origin (no credentials), return '*'
-  return '*'
-}
-
 function corsHeaders(req: NextRequest): HeadersInit {
-  const origin = allowOrigin(req)
+  // Echo requested headers if present; otherwise allow a safe default set.
+  const reqHeaders =
+    req.headers.get('access-control-request-headers') ??
+    'Content-Type, Authorization, X-Requested-With'
+
   return {
-    'Access-Control-Allow-Origin': origin,
+    // Allow ALL origins (NOTE: do not use credentials with "*")
+    'Access-Control-Allow-Origin': '*',
     'Vary': 'Origin',
-    'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With',
-    // Only set this if you actually use cookies/auth; if you do, you cannot use '*'
-    // 'Access-Control-Allow-Credentials': 'true',
+    'Access-Control-Allow-Methods': 'GET,POST,PUT,PATCH,DELETE,OPTIONS,HEAD',
+    'Access-Control-Allow-Headers': reqHeaders,
+    // Cache preflight up to 24h to cut latency
+    'Access-Control-Max-Age': '86400',
+    // Expose common headers to browsers (optional)
+    'Access-Control-Expose-Headers': 'Content-Type, Content-Length, ETag',
   }
 }
 
 export function middleware(req: NextRequest) {
-  // Only handle API routes
-  if (!req.nextUrl.pathname.startsWith('/api/')) return NextResponse.next()
+  // Only apply to API routes
+  if (!req.nextUrl.pathname.startsWith('/api/')) {
+    return NextResponse.next()
+  }
 
-  // Preflight request: reply immediately
+  // Preflight: return immediately
   if (req.method === 'OPTIONS') {
     return new NextResponse(null, { status: 204, headers: corsHeaders(req) })
   }
 
-  // For normal API calls, pass through but attach CORS headers
+  // Normal request: pass through and add CORS headers
   const res = NextResponse.next()
   const headers = corsHeaders(req)
-  Object.entries(headers).forEach(([k, v]) => res.headers.set(k, v))
+  for (const [k, v] of Object.entries(headers)) res.headers.set(k, v)
   return res
 }
 
-// Apply to API only
 export const config = {
   matcher: ['/api/:path*'],
 }
