@@ -1,77 +1,55 @@
-import algosdk from 'algosdk';
+// src/lib/utils/voi/index.ts
+/**
+ * STUB IMPLEMENTATION (no chain calls).
+ * Logs what would happen so you can verify flow end-to-end.
+ *
+ * When you're ready to wire real chain logic, swap these bodies
+ * with actual SDK/indexer calls.
+ */
 
-let nodeUrl: string;
-let indexerUrl: string;
-
-const network = process.env.NETWORK || 'testnet';
-
-if (network === 'mainnet') {
-  nodeUrl = process.env.MAINNET_NODE || 'https://mainnet-api.voi.nodely.dev';
-  indexerUrl = process.env.MAINNET_INDEXER || 'https://mainnet-idx.voi.nodely.dev';
-} else if (network === 'testnet') {
-  nodeUrl = process.env.VOI_NODE || 'https://testnet-api.voi.nodely.dev';
-  indexerUrl = process.env.VOI_INDEXER || 'https://testnet-idx.voi.nodely.dev';
-} else if (network === 'local') {
-  nodeUrl = process.env.LOCAL_NODE || 'http://localhost:4001';
-  indexerUrl = process.env.LOCAL_INDEXER || 'http://localhost:8980';
-} else {
-  throw new Error('Invalid NETWORK env variable');
+// Tiny log helper with timestamp
+const LOG_PREFIX = '[voi:stub]'
+const nowIso = () => new Date().toISOString()
+const log = (msg: string, data?: Record<string, unknown>) => {
+  if (data) console.log(`${LOG_PREFIX} ${nowIso()} ${msg}`, data)
+  else console.log(`${LOG_PREFIX} ${nowIso()} ${msg}`)
 }
-
-const algoClient = new algosdk.Algodv2('', nodeUrl, '');
-const indexer = new algosdk.Indexer('', indexerUrl, '');
-const signer = algosdk.mnemonicToSecretKey(process.env.SIGNER_MNEMONIC || '');
 
 /**
- * Indexer responses vary across SDK versions.
- * Normalize asset list and amount type (number | bigint).
+ * Check if an account already holds the SBT for a given asset.
+ * STUB: always returns false.
  */
-type AccountAsset = {
-  amount: number | bigint;
-  'asset-id'?: number;
-  assetId?: number;
-  asset_id?: number;
-};
-type AccountAssetsResponse = {
-  assets?: AccountAsset[];
-  'asset-holdings'?: AccountAsset[];
-};
-
 export async function hasAchievement(account: string, assetId: number): Promise<boolean> {
-  try {
-    const raw = (await indexer.lookupAccountAssets(account).do()) as unknown as AccountAssetsResponse;
-    const list: AccountAsset[] = raw.assets ?? raw['asset-holdings'] ?? [];
-    const getId = (a: AccountAsset) => a['asset-id'] ?? a.assetId ?? a.asset_id;
-    const found = list.find((a) => getId(a) === assetId);
-    const amt = found?.amount ?? 0;
-    const value = typeof amt === 'bigint' ? Number(amt) : amt; // avoid bigint literal for ES2017 target
-    return value > 0;
-  } catch {
-    return false;
-  }
+  log('hasAchievement called', { account, assetId })
+  // In the real impl, you would query the indexer for ASA holdings.
+  const result = false
+  log('hasAchievement result', { result })
+  return result
 }
 
+/**
+ * Mint the SBT by calling the ARC-72 app.
+ * STUB: logs intent and returns a fake tx id.
+ */
 export async function mintSBT(appId: number, account: string): Promise<string> {
-  const params = await algoClient.getTransactionParams().do();
-  const txn = algosdk.makeApplicationNoOpTxnFromObject({
-    sender: signer.addr,
-    suggestedParams: params,
-    appIndex: appId,
-    appArgs: [new TextEncoder().encode('mint'), algosdk.decodeAddress(account).publicKey],
-  });
-  const signedTxn = txn.signTxn(signer.sk);
-  const response = await algoClient.sendRawTransaction(signedTxn).do();
-  const txId = response.txid;
-  await algosdk.waitForConfirmation(algoClient, txId, 4);
-  return txId;
+  const txid = `stub-tx-${appId}-${Date.now().toString(36)}`
+  log('mintSBT called', { appId, account })
+  // Real impl would:
+  // 1) build app call txn (appArgs: ["mint", decodeAddress(account).publicKey])
+  // 2) sign with signer sk
+  // 3) send & wait for confirmation
+  log('mintSBT returning fake tx id', { txid })
+  return txid
 }
 
-type GlobalStateEntry = { key: string; value: { uint?: number; bytes?: string; type?: number } };
-type AppLookupResponse = { application?: { params?: { 'global-state'?: GlobalStateEntry[] } } };
-
+/**
+ * Read the ARC-72 app's global state to find the SBT asset id.
+ * STUB: logs and returns 0.
+ */
 export async function getSBTAssetId(appId: number): Promise<number> {
-  const appInfo = (await indexer.lookupApplications(appId).do()) as unknown as AppLookupResponse;
-  const state = appInfo.application?.params?.['global-state'] ?? [];
-  const assetEntry = state.find((s) => Buffer.from(s.key, 'base64').toString() === 'assetId');
-  return assetEntry?.value.uint || 0;
+  log('getSBTAssetId called', { appId })
+  // TODO: Implement real 
+  const assetId = 0
+  log('getSBTAssetId result', { assetId })
+  return assetId
 }

@@ -2,13 +2,12 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Achievements API",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "Endpoints to list and claim on-chain achievements."
   },
   "servers": [
     { "url": "https://achievements.houseofvoi.com", "description": "Prod" },
     { "url": "http://localhost:3000", "description": "Local" }
-    
   ],
   "tags": [{ "name": "achievements" }],
   "paths": {
@@ -22,7 +21,10 @@
             "name": "account",
             "in": "query",
             "required": false,
-            "schema": { "type": "string", "description": "Voi address to include hidden if owned" }
+            "schema": {
+              "type": "string",
+              "description": "Voi address to include hidden if owned"
+            }
           },
           {
             "name": "category",
@@ -30,7 +32,7 @@
             "required": false,
             "schema": {
               "type": "string",
-              "enum": ["wagering","wins","losses","loyalty","lp","community","game"]
+              "enum": ["wagering", "wins", "losses", "loyalty", "lp", "community", "game"]
             }
           },
           {
@@ -43,7 +45,10 @@
             "name": "game",
             "in": "query",
             "required": false,
-            "schema": { "type": "string", "description": "gameKey for game-scoped achievements" }
+            "schema": {
+              "type": "string",
+              "description": "gameKey for game-scoped achievements"
+            }
           }
         ],
         "responses": {
@@ -75,7 +80,22 @@
         "requestBody": {
           "required": true,
           "content": {
-            "application/json": { "schema": { "$ref": "#/components/schemas/ClaimRequest" } }
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ClaimRequest" },
+              "examples": {
+                "basic": {
+                  "summary": "Claim for an account",
+                  "value": { "account": "HEDLDFCAXTD4KSNZ3JSF5PCGZEAK4NPFFL6XFEAUWXSZZYDHOVDXCOHS7I" }
+                },
+                "dryRun": {
+                  "summary": "Validate & log only",
+                  "value": {
+                    "account": "HEDLDFCAXTD4KSNZ3JSF5PCGZEAK4NPFFL6XFEAUWXSZZYDHOVDXCOHS7I",
+                    "dryRun": true
+                  }
+                }
+              }
+            }
           }
         },
         "responses": {
@@ -103,38 +123,55 @@
         "properties": {
           "id": { "type": "string", "example": "wager-warrior-100k" },
           "name": { "type": "string", "example": "Wager Warrior - 100K" },
-          "description": { "type": "string", "example": "Reach a total wagered amount of 100K USD equivalent." },
+          "description": {
+            "type": "string",
+            "example": "Reach a total wagered amount of 100K USD equivalent."
+          },
           "imageUrl": { "type": "string", "format": "uri", "nullable": true },
           "display": {
             "type": "object",
             "nullable": true,
             "properties": {
-              "category": { "type": "string", "enum": ["wagering","wins","losses","loyalty","lp","community","game"] },
+              "category": {
+                "type": "string",
+                "enum": ["wagering", "wins", "losses", "loyalty", "lp", "community", "game"]
+              },
               "series": { "type": "string", "example": "Wager Warrior" },
               "seriesKey": { "type": "string", "example": "wager_warrior" },
               "tier": { "type": "integer", "minimum": 1, "example": 1 },
               "tiersTotal": { "type": "integer", "minimum": 1, "example": 6 },
               "order": { "type": "integer", "example": 1 },
-              "tags": { "type": "array", "items": { "type": "string" }, "example": ["milestone","volume"] },
+              "tags": {
+                "type": "array",
+                "items": { "type": "string" },
+                "example": ["milestone", "volume"]
+              },
               "scope": {
                 "type": "object",
                 "nullable": true,
                 "properties": {
-                  "kind": { "type": "string", "enum": ["global","game"], "example": "global" },
+                  "kind": { "type": "string", "enum": ["global", "game"], "example": "global" },
                   "gameKey": { "type": "string", "nullable": true, "example": "xplosion" },
                   "gameName": { "type": "string", "nullable": true, "example": "Xplosion Slots" }
                 }
               }
             }
           }
-        }
+        },
+        "additionalProperties": false
       },
       "ClaimRequest": {
         "type": "object",
         "required": ["account"],
         "properties": {
-          "account": { "type": "string", "description": "Voi (Algorand) address" }
-        }
+          "account": { "type": "string", "description": "Voi (Algorand) address" },
+          "dryRun": {
+            "type": "boolean",
+            "description": "If true, only perform eligibility checks and log; do not mint.",
+            "default": false
+          }
+        },
+        "additionalProperties": false
       },
       "ClaimResult": {
         "type": "object",
@@ -148,7 +185,8 @@
               "properties": {
                 "id": { "type": "string", "example": "wager-warrior-100k" },
                 "txnId": { "type": "string", "example": "SOMEALGOTXNID..." }
-              }
+              },
+              "additionalProperties": false
             }
           },
           "errors": {
@@ -159,17 +197,20 @@
               "properties": {
                 "id": { "type": "string" },
                 "reason": { "type": "string", "example": "Already minted" }
-              }
+              },
+              "additionalProperties": false
             }
           }
-        }
+        },
+        "additionalProperties": false
       },
       "Error": {
         "type": "object",
         "required": ["error"],
         "properties": {
           "error": { "type": "string", "example": "Invalid account" }
-        }
+        },
+        "additionalProperties": false
       }
     }
   }

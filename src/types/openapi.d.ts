@@ -85,6 +85,11 @@ export interface components {
         ClaimRequest: {
             /** @description Voi (Algorand) address */
             account: string;
+            /**
+             * @description If true, only perform eligibility checks and log; do not mint.
+             * @default false
+             */
+            dryRun: boolean;
         };
         ClaimResult: {
             minted: {

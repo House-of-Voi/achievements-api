@@ -1,7 +1,7 @@
 // src/lib/achievements/factories.ts
 import type { IAchievement } from '../types';
 import { AchievementCategory } from '../types';
-import * as utils from '../utils/voi';
+import * as utils from './voi';
 
 type Tier = { suffix: string; name: string; desc: string; imageUrl?: string };
 

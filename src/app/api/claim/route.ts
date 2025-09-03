@@ -1,66 +1,123 @@
-// app/api/achievements/claim/route.ts
+// src/app/api/claim/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import fs from 'fs'
 import path from 'path'
 import * as algosdk from 'algosdk'
 import type { IAchievement } from '@/lib/types'
 import * as utils from '@/lib/utils/voi'
-
-// OpenAPI-generated types
 import type { paths, components } from '@/types/openapi'
 
 const ACH_DIR = path.join(process.cwd(), 'src/lib/achievements')
 
+// ----- light logger (keep route logs minimal; heavy logs are inside the achievement files) -----
+const LP = '[claim]'
+const nowIso = () => new Date().toISOString()
+const slog = (msg: string, data?: Record<string, unknown>) =>
+  (data ? console.log(`${LP} ${nowIso()} ${msg}`, data) : console.log(`${LP} ${nowIso()} ${msg}`))
+
+// Type-safe shape guard (no "any")
+function isAchievement(x: unknown): x is IAchievement {
+  if (!x || typeof x !== 'object') return false
+  const o = x as Record<string, unknown>
+  return (
+    typeof o.id === 'string' &&
+    typeof o.name === 'string' &&
+    typeof o.description === 'string' &&
+    typeof o.getContractAppId === 'function' &&
+    typeof o.checkRequirement === 'function' &&
+    typeof o.mint === 'function'
+  )
+}
+
+// Load all achievements; support modules exporting a single item OR an array
 async function loadAchievements(): Promise<IAchievement[]> {
   const files = fs.readdirSync(ACH_DIR).filter((f) => f.endsWith('.ts'))
+  slog('Loading achievement modules', { count: files.length })
 
-  const mods = await Promise.all(
+  const lists = await Promise.all(
     files.map(async (f) => {
       const base = f.replace(/\.ts$/, '')
-      // Let the bundler pre-build a context of possible modules in this folder.
       const mod = await import(
         /* webpackInclude: /\.ts$/ */
         /* webpackMode: "lazy" */
         `@/lib/achievements/${base}.ts`
       )
-      const ach = { ...(mod.default as IAchievement) }
-      ach.enabled = ach.enabled ?? true
-      ach.hidden = ach.hidden ?? false
-      return ach
+      const raw = (mod.default ?? mod) as unknown
+      const arr = Array.isArray(raw) ? raw : [raw]
+      return arr
     })
   )
 
-  return mods
+  // Normalize flags; default enabled:true, hidden:false
+  const all = lists.flat().map((a) => ({
+    enabled: (a as IAchievement)?.enabled ?? true,
+    hidden: (a as IAchievement)?.hidden ?? false,
+    ...(a as IAchievement),
+  }))
+
+  slog('Loaded achievements', { total: all.length })
+  return all
 }
 
 export async function POST(req: NextRequest) {
   type Body = paths['/api/claim']['post']['requestBody']['content']['application/json']
-  type Ok   = paths['/api/claim']['post']['responses']['200']['content']['application/json']
-  type Err  = components['schemas']['Error']
+  type Ok = paths['/api/claim']['post']['responses']['200']['content']['application/json']
+  type Err = components['schemas']['Error']
 
-  const { account } = (await req.json()) as Body
+  const body = (await req.json()) as Body
+  const account = (body as Record<string, unknown>)?.['account'] as string | undefined
 
-  if (!algosdk.isValidAddress(account)) {
+  slog('Incoming claim request', { account })
+
+  if (!account || !algosdk.isValidAddress(account)) {
+    slog('Invalid account', { account })
     return NextResponse.json<Err>({ error: 'Invalid account' }, { status: 400 })
   }
 
   const achievements = await loadAchievements()
   const result: Ok = { minted: [], errors: [] }
 
-  for (const ach of achievements) {
+  for (const item of achievements) {
+    const id = (item as IAchievement)?.id ?? '(unknown)'
+
     try {
-      if (!ach.enabled) continue
-      const appId = ach.getContractAppId()
+      if (!isAchievement(item)) {
+        const reason = 'Invalid achievement export (missing required methods)'
+        slog('Skip (invalid shape)', { id, reason })
+        result.errors.push({ id, reason })
+        continue
+      }
+
+      if (!item.enabled) {
+        slog('Skip (disabled)', { id })
+        continue
+      }
+
+      // Note: detailed logs happen inside the achievement implementation (getContractAppId, checkRequirement, mint)
+      const appId = item.getContractAppId()
       const assetId = await utils.getSBTAssetId(appId)
-      if (await utils.hasAchievement(account, assetId)) continue
-      if (!(await ach.checkRequirement(account))) continue
-      const txnId = await ach.mint(account)
-      result.minted.push({ id: ach.id, txnId })
+
+      if (await utils.hasAchievement(account, assetId)) {
+        slog('Skip (already has achievement)', { id, account, assetId })
+        continue
+      }
+
+      const eligible = await item.checkRequirement(account)
+      if (!eligible) {
+        slog('Skip (not eligible)', { id, account })
+        continue
+      }
+
+      const txnId = await item.mint(account)
+      slog('Mint success', { id, account, txnId })
+      result.minted.push({ id, txnId })
     } catch (e) {
       const reason = e instanceof Error ? e.message : 'Unknown error'
-      result.errors.push({ id: ach.id, reason })
+      slog('Mint error', { id, account, reason })
+      result.errors.push({ id, reason })
     }
   }
 
+  slog('Claim summary', { minted: result.minted.length, errors: result.errors.length })
   return NextResponse.json(result)
 }
