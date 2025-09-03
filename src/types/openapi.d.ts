@@ -11,7 +11,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List visible achievements */
+        /**
+         * Get achievements (list or single)
+         * @description If `id` is provided, returns a single achievement (including hidden). Otherwise returns a list. In list mode, hidden achievements are only returned if the caller owns them (provide `account`).
+         */
         get: operations["listAchievements"];
         put?: never;
         post?: never;
@@ -83,7 +86,7 @@ export interface components {
             } | null;
         };
         ClaimRequest: {
-            /** @description Voi (Algorand) address */
+            /** @description Voi address */
             account: string;
             /**
              * @description If true, only perform eligibility checks and log; do not mint.
@@ -95,7 +98,7 @@ export interface components {
             minted: {
                 /** @example wager-warrior-100k */
                 id: string;
-                /** @example SOMEALGOTXNID... */
+                /** @example SOMEVOITXID... */
                 txnId: string;
             }[];
             errors: {
@@ -120,6 +123,8 @@ export interface operations {
     listAchievements: {
         parameters: {
             query?: {
+                /** @description Exact achievement id. If present, the response body is a single object (hidden allowed). */
+                id?: string;
                 account?: string;
                 category?: "wagering" | "wins" | "losses" | "loyalty" | "lp" | "community" | "game";
                 seriesKey?: string;
@@ -131,17 +136,26 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Array of public (and account-visible) achievements */
+            /** @description Single achievement (when id is provided) or an array of achievements */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AchievementMetadata"][];
+                    "application/json": components["schemas"]["AchievementMetadata"] | components["schemas"]["AchievementMetadata"][];
                 };
             };
             /** @description Invalid account */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Achievement not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

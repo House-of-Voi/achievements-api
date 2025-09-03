@@ -9,7 +9,12 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+
+    "gen:openapi": "mkdir -p src/types && openapi-typescript openapi.json -o src/types/openapi.d.ts",
+    "prebuild": "npm run gen:openapi",
+    "postinstall": "npm run gen:openapi",
+    "dev:types": "openapi-typescript --watch openapi.json -o src/types/openapi.d.ts"
   },
   "dependencies": {
     "algosdk": "^3.4.0",

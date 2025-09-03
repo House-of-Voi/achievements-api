@@ -15,16 +15,21 @@
       "get": {
         "operationId": "listAchievements",
         "tags": ["achievements"],
-        "summary": "List visible achievements",
+        "summary": "Get achievements (list or single)",
+        "description": "If `id` is provided, returns a single achievement (including hidden). Otherwise returns a list. In list mode, hidden achievements are only returned if the caller owns them (provide `account`).",
         "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Exact achievement id. If present, the response body is a single object (hidden allowed)."
+          },
           {
             "name": "account",
             "in": "query",
             "required": false,
-            "schema": {
-              "type": "string",
-              "description": "Voi address to include hidden if owned"
-            }
+            "schema": { "type": "string", "description": "Voi address to include hidden if owned (list mode)" }
           },
           {
             "name": "category",
@@ -32,7 +37,7 @@
             "required": false,
             "schema": {
               "type": "string",
-              "enum": ["wagering", "wins", "losses", "loyalty", "lp", "community", "game"]
+              "enum": ["wagering","wins","losses","loyalty","lp","community","game"]
             }
           },
           {
@@ -45,29 +50,50 @@
             "name": "game",
             "in": "query",
             "required": false,
-            "schema": {
-              "type": "string",
-              "description": "gameKey for game-scoped achievements"
-            }
+            "schema": { "type": "string", "description": "gameKey for game-scoped achievements" }
           }
         ],
         "responses": {
           "200": {
-            "description": "Array of public (and account-visible) achievements",
+            "description": "Single achievement (when id is provided) or an array of achievements",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": { "$ref": "#/components/schemas/AchievementMetadata" }
+                  "oneOf": [
+                    { "$ref": "#/components/schemas/AchievementMetadata" },
+                    { "type": "array", "items": { "$ref": "#/components/schemas/AchievementMetadata" } }
+                  ]
+                },
+                "examples": {
+                  "single": {
+                    "summary": "Single",
+                    "value": {
+                      "id": "wager-warrior-100k",
+                      "name": "Wager Warrior - 100K",
+                      "description": "Reach a total wagered amount of 100K USD equivalent."
+                    }
+                  },
+                  "list": {
+                    "summary": "List",
+                    "value": [
+                      {
+                        "id": "wager-warrior-100k",
+                        "name": "Wager Warrior - 100K",
+                        "description": "Reach a total wagered amount of 100K USD equivalent."
+                      }
+                    ]
+                  }
                 }
               }
             }
           },
           "400": {
             "description": "Invalid account",
-            "content": {
-              "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
-            }
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
+          },
+          "404": {
+            "description": "Achievement not found",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
           }
         }
       }
@@ -101,15 +127,11 @@
         "responses": {
           "200": {
             "description": "Mint results per achievement",
-            "content": {
-              "application/json": { "schema": { "$ref": "#/components/schemas/ClaimResult" } }
-            }
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ClaimResult" } } }
           },
           "400": {
             "description": "Invalid account",
-            "content": {
-              "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
-            }
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } }
           }
         }
       }
@@ -119,14 +141,11 @@
     "schemas": {
       "AchievementMetadata": {
         "type": "object",
-        "required": ["id", "name", "description"],
+        "required": ["id","name","description"],
         "properties": {
           "id": { "type": "string", "example": "wager-warrior-100k" },
           "name": { "type": "string", "example": "Wager Warrior - 100K" },
-          "description": {
-            "type": "string",
-            "example": "Reach a total wagered amount of 100K USD equivalent."
-          },
+          "description": { "type": "string", "example": "Reach a total wagered amount of 100K USD equivalent." },
           "imageUrl": { "type": "string", "format": "uri", "nullable": true },
           "display": {
             "type": "object",
@@ -134,23 +153,19 @@
             "properties": {
               "category": {
                 "type": "string",
-                "enum": ["wagering", "wins", "losses", "loyalty", "lp", "community", "game"]
+                "enum": ["wagering","wins","losses","loyalty","lp","community","game"]
               },
               "series": { "type": "string", "example": "Wager Warrior" },
               "seriesKey": { "type": "string", "example": "wager_warrior" },
               "tier": { "type": "integer", "minimum": 1, "example": 1 },
               "tiersTotal": { "type": "integer", "minimum": 1, "example": 6 },
               "order": { "type": "integer", "example": 1 },
-              "tags": {
-                "type": "array",
-                "items": { "type": "string" },
-                "example": ["milestone", "volume"]
-              },
+              "tags": { "type": "array", "items": { "type": "string" }, "example": ["milestone","volume"] },
               "scope": {
                 "type": "object",
                 "nullable": true,
                 "properties": {
-                  "kind": { "type": "string", "enum": ["global", "game"], "example": "global" },
+                  "kind": { "type": "string", "enum": ["global","game"], "example": "global" },
                   "gameKey": { "type": "string", "nullable": true, "example": "xplosion" },
                   "gameName": { "type": "string", "nullable": true, "example": "Xplosion Slots" }
                 }
@@ -164,7 +179,7 @@
         "type": "object",
         "required": ["account"],
         "properties": {
-          "account": { "type": "string", "description": "Voi (Algorand) address" },
+          "account": { "type": "string", "description": "Voi address" },
           "dryRun": {
             "type": "boolean",
             "description": "If true, only perform eligibility checks and log; do not mint.",
@@ -175,16 +190,16 @@
       },
       "ClaimResult": {
         "type": "object",
-        "required": ["minted", "errors"],
+        "required": ["minted","errors"],
         "properties": {
           "minted": {
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["id", "txnId"],
+              "required": ["id","txnId"],
               "properties": {
                 "id": { "type": "string", "example": "wager-warrior-100k" },
-                "txnId": { "type": "string", "example": "SOMEALGOTXNID..." }
+                "txnId": { "type": "string", "example": "SOMEVOITXID..." }
               },
               "additionalProperties": false
             }
@@ -193,7 +208,7 @@
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["id", "reason"],
+              "required": ["id","reason"],
               "properties": {
                 "id": { "type": "string" },
                 "reason": { "type": "string", "example": "Already minted" }

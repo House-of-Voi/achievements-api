@@ -13,6 +13,7 @@ let cached: IAchievement[] | null = null
 
 async function loadAchievements(): Promise<IAchievement[]> {
   if (cached) return cached
+
   const files = fs.readdirSync(ACH_DIR).filter((f) => f.endsWith('.ts'))
 
   const lists = await Promise.all(
@@ -34,58 +35,34 @@ async function loadAchievements(): Promise<IAchievement[]> {
 }
 
 export async function GET(req: Request) {
-  type QueryOpt = paths['/api/achievements']['get']['parameters']['query']           // possibly undefined
-  type QueryRaw = NonNullable<QueryOpt>                                             // concrete object type
+  type QueryOpt = paths['/api/achievements']['get']['parameters']['query']
+  type QueryRaw = NonNullable<QueryOpt>
   type Ok       = paths['/api/achievements']['get']['responses']['200']['content']['application/json']
+  type One      = components['schemas']['AchievementMetadata']
   type Err      = components['schemas']['Error']
   type Category = NonNullable<QueryRaw['category']>
 
-  // narrow category from string|null -> Category|undefined
-  const CAT_VALUES: readonly Category[] = ['wagering','wins','losses','loyalty','lp','community','game'] as const
+  const CAT_VALUES: readonly Category[] = [
+    'wagering','wins','losses','loyalty','lp','community','game'
+  ] as const
   const parseCategory = (v: string | null): Category | undefined =>
     CAT_VALUES.includes(v as Category) ? (v as Category) : undefined
 
   const url = new URL(req.url)
+  const id        = url.searchParams.get('id')        ?? undefined
   const account   = url.searchParams.get('account')   ?? undefined
   const category  = parseCategory(url.searchParams.get('category'))
   const seriesKey = url.searchParams.get('seriesKey') ?? undefined
   const game      = url.searchParams.get('game')      ?? undefined
 
-  // Build a *non-optional* query object matching QueryRaw
-  const query: QueryRaw = { account, category, seriesKey, game }
-
-  if (query.account && !algosdk.isValidAddress(query.account)) {
+  if (account && !algosdk.isValidAddress(account)) {
     return NextResponse.json<Err>({ error: 'Invalid account' }, { status: 400 })
   }
 
-  // pre-filter
-  let achievements = await loadAchievements()
-  if (query.category) {
-    achievements = achievements.filter(a => a.display?.category === query.category)
-  }
-  if (query.seriesKey) {
-    achievements = achievements.filter(a => a.display?.seriesKey === query.seriesKey)
-  }
-  if (query.game) {
-    achievements = achievements.filter(a =>
-      a.display?.scope?.kind === 'game' && a.display.scope.gameKey === query.game
-    )
-  }
+  const achievements = await loadAchievements()
 
-  // visibility gating for hidden ones
-  const visibility = await Promise.all(
-    achievements.map(async (a) => {
-      if (!a.hidden) return true
-      if (!query.account) return false
-      const assetId = await utils.getSBTAssetId(a.getContractAppId())
-      return utils.hasAchievement(query.account, assetId)
-    })
-  )
-
-  // full display metadata
-const body = achievements
-  .filter((_, i) => visibility[i])
-  .map((a) => {
+  // helper to convert internal model -> API metadata
+  const toMeta = (a: IAchievement): One => {
     const scope =
       a.display?.scope
         ? (a.display.scope.kind === 'game'
@@ -111,7 +88,46 @@ const body = achievements
           }
         : undefined,
     }
-  }) satisfies Ok
+  }
+
+  // --- SINGLE-ITEM MODE: always return the achievement by id, even if hidden ---
+  if (id) {
+    const a = achievements.find(x => x.id === id)
+    if (!a) {
+      return NextResponse.json<Err>({ error: 'Not found' }, { status: 404 })
+    }
+    // NOTE: we deliberately do NOT gate on a.hidden here.
+    // Hidden achievements are visible when fetched directly by ID.
+    const one = toMeta(a)
+    // Our OpenAPI "200" type is an array; cast to keep types happy without regenerating.
+    return NextResponse.json<Ok>(one as unknown as Ok)
+  }
+
+  // --- LIST MODE: keep normal filters and visibility rules ---
+  let list = achievements
+  if (category) {
+    list = list.filter(a => a.display?.category === category)
+  }
+  if (seriesKey) {
+    list = list.filter(a => a.display?.seriesKey === seriesKey)
+  }
+  if (game) {
+    list = list.filter(a => a.display?.scope?.kind === 'game' && a.display.scope.gameKey === game)
+  }
+
+  // visibility gating for hidden items (list mode only)
+  const visibility = await Promise.all(
+    list.map(async (a) => {
+      if (!a.hidden) return true
+      if (!account) return false
+      const assetId = await utils.getSBTAssetId(a.getContractAppId())
+      return utils.hasAchievement(account, assetId)
+    })
+  )
+
+  const body = list
+    .filter((_, i) => visibility[i])
+    .map(toMeta) as One[]
 
   // pretty sort
   body.sort((x, y) => {
@@ -124,5 +140,5 @@ const body = achievements
     return x.name.localeCompare(y.name)
   })
 
-  return NextResponse.json<Ok>(body)
+  return NextResponse.json<Ok>(body as Ok)
 }
