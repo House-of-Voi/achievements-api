@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Achievements API",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "description": "Endpoints to list and claim on-chain achievements."
   },
   "servers": [
@@ -79,7 +79,8 @@
                       {
                         "id": "wager-warrior-100k",
                         "name": "Wager Warrior - 100K",
-                        "description": "Reach a total wagered amount of 100K USD equivalent."
+                        "description": "Reach a total wagered amount of 100K USD equivalent.",
+                        "owned": true
                       }
                     ]
                   }
@@ -102,15 +103,23 @@
       "post": {
         "operationId": "claimAchievements",
         "tags": ["achievements"],
-        "summary": "Claim all eligible achievements for an account",
+        "summary": "Claim achievements (single or all) for an account",
+        "description": "Claims a single achievement when `id` is provided in the body; otherwise claims all eligible achievements. If the specified `id` does not exist, the response is 200 with an `errors` entry { reason: \"Not found\" }.",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": { "$ref": "#/components/schemas/ClaimRequest" },
               "examples": {
-                "basic": {
-                  "summary": "Claim for an account",
+                "singleId": {
+                  "summary": "Claim a single achievement by id",
+                  "value": {
+                    "account": "HEDLDFCAXTD4KSNZ3JSF5PCGZEAK4NPFFL6XFEAUWXSZZYDHOVDXCOHS7I",
+                    "id": "wager-warrior-100k"
+                  }
+                },
+                "all": {
+                  "summary": "Claim for an account (all eligible)",
                   "value": { "account": "HEDLDFCAXTD4KSNZ3JSF5PCGZEAK4NPFFL6XFEAUWXSZZYDHOVDXCOHS7I" }
                 },
                 "dryRun": {
@@ -171,6 +180,10 @@
                 }
               }
             }
+          },
+          "owned": {
+            "type": "boolean",
+            "description": "Present when the `account` query param is supplied. `true` if that account owns this achievement."
           }
         },
         "additionalProperties": false
@@ -180,6 +193,10 @@
         "required": ["account"],
         "properties": {
           "account": { "type": "string", "description": "Voi address" },
+          "id": {
+            "type": "string",
+            "description": "Optional achievement id. If provided, only this achievement will be attempted."
+          },
           "dryRun": {
             "type": "boolean",
             "description": "If true, only perform eligibility checks and log; do not mint.",

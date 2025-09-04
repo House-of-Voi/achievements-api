@@ -44,10 +44,10 @@ interface TierDef {
 }
 
 const TIERS: readonly TierDef[] = [
-  { key: 'x25',   label: '25x',   minX: 25,   contractAppIds: { mainnet: 0, testnet: 0 } },
-  { key: 'x50',   label: '50x',   minX: 50,   contractAppIds: { mainnet: 0, testnet: 0 } },
-  { key: 'x100',  label: '100x',  minX: 100,  contractAppIds: { mainnet: 0, testnet: 0 } },
-  { key: 'x500',  label: '500x',  minX: 500,  contractAppIds: { mainnet: 0, testnet: 0 } },
+  { key: 'x25', label: '25x', minX: 25, contractAppIds: { mainnet: 0, testnet: 0 } },
+  { key: 'x50', label: '50x', minX: 50, contractAppIds: { mainnet: 0, testnet: 0 } },
+  { key: 'x100', label: '100x', minX: 100, contractAppIds: { mainnet: 0, testnet: 0 } },
+  { key: 'x500', label: '500x', minX: 500, contractAppIds: { mainnet: 0, testnet: 0 } },
   { key: 'x1000', label: '1000x', minX: 1000, contractAppIds: { mainnet: 0, testnet: 0 } },
 ] as const
 
@@ -116,10 +116,11 @@ const achievements: IAchievement[] = TIERS.map((t, i) => {
     async mint(account) {
       log('mint() start', { id, account })
       const appId = getAppIdFor(id)
-      const assetId = await utils.getSBTAssetId(appId)
-      const has = await utils.hasAchievement(account, assetId)
-      log('pre-mint state', { id, appId, assetId, alreadyHas: has })
+      const has = await utils.hasAchievement(account, appId)
+
+      log('pre-mint state', { id, appId, alreadyHas: has })
       if (has) throw new Error('Already minted')
+
       const tx = await utils.mintSBT(appId, account)
       log('mint() done', { id, account, tx })
       return tx

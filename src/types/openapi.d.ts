@@ -33,7 +33,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Claim all eligible achievements for an account */
+        /**
+         * Claim achievements (single or all) for an account
+         * @description Claims a single achievement when `id` is provided in the body; otherwise claims all eligible achievements. If the specified `id` does not exist, the response is 200 with an `errors` entry { reason: "Not found" }.
+         */
         post: operations["claimAchievements"];
         delete?: never;
         options?: never;
@@ -84,10 +87,14 @@ export interface components {
                     gameName?: string | null;
                 } | null;
             } | null;
+            /** @description Present when the `account` query param is supplied. `true` if that account owns this achievement. */
+            owned?: boolean;
         };
         ClaimRequest: {
             /** @description Voi address */
             account: string;
+            /** @description Optional achievement id. If provided, only this achievement will be attempted. */
+            id?: string;
             /**
              * @description If true, only perform eligibility checks and log; do not mint.
              * @default false

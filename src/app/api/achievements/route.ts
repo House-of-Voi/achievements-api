@@ -67,7 +67,7 @@ export async function GET(req: Request) {
   const achievements = await loadAchievements()
 
   // convert internal model -> API metadata (and make image URL absolute)
-  const toMeta = (a: IAchievement): One => {
+  const toMeta = (a: IAchievement, owned?: boolean): One & { owned?: boolean } => {
     const scope =
       a.display?.scope
         ? (a.display.scope.kind === 'game'
@@ -78,7 +78,7 @@ export async function GET(req: Request) {
     const relImg = a.imageUrl ?? relImageFromId(a.id)
     const imgAbs = absolutePublicUrl(req, relImg)
 
-    return {
+    const base: One = {
       id: a.id,
       name: a.name,
       description: a.description,
@@ -96,6 +96,9 @@ export async function GET(req: Request) {
           }
         : undefined,
     }
+
+    // Include 'owned' only when an account was provided (optional field)
+    return account ? { ...base, owned: !!owned } : base
   }
 
   // --- SINGLE-ITEM MODE: always return the achievement by id, even if hidden ---
@@ -104,7 +107,8 @@ export async function GET(req: Request) {
     if (!a) {
       return NextResponse.json<Err>({ error: 'Not found' }, { status: 404 })
     }
-    const one = toMeta(a)
+    const owned = account ? await utils.hasAchievement(account, a.getContractAppId()) : false
+    const one = toMeta(a, owned)
     // Our OpenAPI 200 is oneOf(single|array) — cast to satisfy TS without regenerating
     return NextResponse.json<Ok>(one as unknown as Ok)
   }
@@ -123,18 +127,20 @@ export async function GET(req: Request) {
     )
   }
 
-  const visibility = await Promise.all(
-    list.map(async (a) => {
-      if (!a.hidden) return true
-      if (!account) return false
-      const assetId = await utils.getSBTAssetId(a.getContractAppId())
-      return utils.hasAchievement(account, assetId)
-    })
+  // Ownership lookup (once per item)
+  const ownership = await Promise.all(
+    list.map(async (a) => (account ? utils.hasAchievement(account, a.getContractAppId()) : false))
   )
 
-  const body = list
-    .filter((_, i) => visibility[i])
-    .map(toMeta) as One[]
+  // Hidden gating: show hidden only if owned; visible always shown
+  const visibleIdx: number[] = []
+  for (let i = 0; i < list.length; i++) {
+    const a = list[i]
+    const show = a.hidden ? ownership[i] : true
+    if (show) visibleIdx.push(i)
+  }
+
+  const body = visibleIdx.map((i) => toMeta(list[i], ownership[i])) as One[]
 
   body.sort((x, y) => {
     const sx = x.display?.seriesKey ?? ''

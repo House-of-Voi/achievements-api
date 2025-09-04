@@ -10,7 +10,6 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-
     "gen:openapi": "mkdir -p src/types && openapi-typescript openapi.json -o src/types/openapi.d.ts",
     "prebuild": "npm run gen:openapi",
     "postinstall": "npm run gen:openapi",
@@ -21,7 +20,8 @@
     "next": "15.5.2",
     "rapidoc": "^9.3.8",
     "react": "19.1.0",
-    "react-dom": "19.1.0"
+    "react-dom": "19.1.0",
+    "ulujs": "^0.12.15"
   },
   "devDependencies": {
     "@types/node": "^20.19.11",

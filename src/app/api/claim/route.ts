@@ -65,19 +65,36 @@ export async function POST(req: NextRequest) {
   type Err = components['schemas']['Error']
 
   const body = (await req.json()) as Body
-  const account = (body as Record<string, unknown>)?.['account'] as string | undefined
+  const bag = body as unknown as Record<string, unknown>
+  const account = bag['account'] as string | undefined
+  const requestedId = (bag['id'] as string | undefined)?.trim() || undefined
 
-  slog('Incoming claim request', { account })
+  slog('Incoming claim request', { account, requestedId: requestedId ?? '(all)' })
 
   if (!account || !algosdk.isValidAddress(account)) {
     slog('Invalid account', { account })
     return NextResponse.json<Err>({ error: 'Invalid account' }, { status: 400 })
   }
 
-  const achievements = await loadAchievements()
+  const all = await loadAchievements()
+
+  // Select targets:
+  // - if `requestedId` provided, only claim that one (if it exists)
+  // - else process all (as before)
+  let targets: IAchievement[] = all
+  if (requestedId) {
+    const one = all.find(a => a.id === requestedId)
+    if (!one) {
+      const notFound: Ok = { minted: [], errors: [{ id: requestedId, reason: 'Not found' }] }
+      slog('Requested id not found', { requestedId })
+      return NextResponse.json(notFound)
+    }
+    targets = [one]
+  }
+
   const result: Ok = { minted: [], errors: [] }
 
-  for (const item of achievements) {
+  for (const item of targets) {
     const id = (item as IAchievement)?.id ?? '(unknown)'
 
     try {
@@ -90,21 +107,24 @@ export async function POST(req: NextRequest) {
 
       if (!item.enabled) {
         slog('Skip (disabled)', { id })
+        // Keep response shape consistent; only add an error if single-id was requested
+        if (requestedId) result.errors.push({ id, reason: 'Disabled' })
         continue
       }
 
-      // Note: detailed logs happen inside the achievement implementation (getContractAppId, checkRequirement, mint)
       const appId = item.getContractAppId()
-      const assetId = await utils.getSBTAssetId(appId)
 
-      if (await utils.hasAchievement(account, assetId)) {
-        slog('Skip (already has achievement)', { id, account, assetId })
+      if (await utils.hasAchievement(account, appId)) {
+        slog('Skip (already has achievement)', { id, account, appId })
+        // Only annotate as error in single-id mode
+        if (requestedId) result.errors.push({ id, reason: 'Already minted' })
         continue
       }
 
       const eligible = await item.checkRequirement(account)
       if (!eligible) {
         slog('Skip (not eligible)', { id, account })
+        if (requestedId) result.errors.push({ id, reason: 'Not eligible' })
         continue
       }
 

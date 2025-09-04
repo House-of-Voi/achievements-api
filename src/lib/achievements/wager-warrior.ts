@@ -12,7 +12,7 @@ const log = (msg: string, data?: Record<string, unknown>) =>
 // ---------- External data sources ----------
 // NOTE: appId is hardcoded here per your request.
 const HOV_PLAYER_BASE = 'https://voi-mainnet-mimirapi.nftnavigator.xyz/hov/players?appId=40879920'
-const VOI_PRICE_URL   = 'https://voirewards.com/api/markets?token=VOI'
+const VOI_PRICE_URL = 'https://voirewards.com/api/markets?token=VOI'
 const VOI_DECIMALS = 6
 
 // ---------- Static image helper (served from /public) ----------
@@ -49,12 +49,12 @@ interface TierDef {
 }
 
 const TIERS: readonly TierDef[] = [
-  { key: '100k', label: '100K',  usd: 100_000,    contractAppIds: { mainnet: 0, testnet: 0 } },
-  { key: '200k', label: '200K',  usd: 200_000,    contractAppIds: { mainnet: 0, testnet: 0 } },
-  { key: '500k', label: '500K',  usd: 500_000,    contractAppIds: { mainnet: 0, testnet: 0 } },
-  { key: '1m',   label: '1M',    usd: 1_000_000,  contractAppIds: { mainnet: 0, testnet: 0 } },
-  { key: '5m',   label: '5M',    usd: 5_000_000,  contractAppIds: { mainnet: 0, testnet: 0 } },
-  { key: '10m',  label: '10M',   usd: 10_000_000, contractAppIds: { mainnet: 0, testnet: 0 } },
+  { key: '100k', label: '100K', usd: 100_000, contractAppIds: { mainnet: 0, testnet: 0 } },
+  { key: '200k', label: '200K', usd: 200_000, contractAppIds: { mainnet: 0, testnet: 0 } },
+  { key: '500k', label: '500K', usd: 500_000, contractAppIds: { mainnet: 0, testnet: 0 } },
+  { key: '1m', label: '1M', usd: 1_000_000, contractAppIds: { mainnet: 0, testnet: 0 } },
+  { key: '5m', label: '5M', usd: 5_000_000, contractAppIds: { mainnet: 0, testnet: 0 } },
+  { key: '10m', label: '10M', usd: 10_000_000, contractAppIds: { mainnet: 0, testnet: 0 } },
 ] as const
 
 const fullIdForKey = (key: string) => `wager-warrior-${key}`
@@ -205,10 +205,11 @@ const achievements: IAchievement[] = TIERS.map((t, i) => {
     async mint(account) {
       log('mint() start', { id, account })
       const appId = getAppIdFor(id)
-      const assetId = await utils.getSBTAssetId(appId)
-      const has = await utils.hasAchievement(account, assetId)
-      log('pre-mint state', { id, appId, assetId, alreadyHas: has })
+      const has = await utils.hasAchievement(account, appId)
+
+      log('pre-mint state', { id, appId, alreadyHas: has })
       if (has) throw new Error('Already minted')
+
       const tx = await utils.mintSBT(appId, account)
       log('mint() done', { id, account, tx })
       return tx
