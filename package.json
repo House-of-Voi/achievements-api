@@ -16,7 +16,8 @@
     "dev:types": "openapi-typescript --watch openapi.json -o src/types/openapi.d.ts"
   },
   "dependencies": {
-    "algosdk": "^3.4.0",
+    "@algorandfoundation/algokit-utils": "^6.2.1",
+    "algosdk": "^2.11.0",
     "next": "15.5.2",
     "rapidoc": "^9.3.8",
     "react": "19.1.0",
