@@ -1,13 +1,18 @@
 // src/app/api/achievements/route.ts
 import { NextResponse } from 'next/server'
-import * as algosdk from 'algosdk'
 import type { IAchievement } from '@/lib/types'
 import * as utils from '@/lib/utils/voi'
 import fs from 'fs'
 import path from 'path'
 import type { paths, components } from '@/types/openapi'
+import { absolutePublicUrl, relImageFromId } from '@/lib/utils/assets'
 
 const ACH_DIR = path.join(process.cwd(), 'src/lib/achievements')
+
+// Minimal VOI address format check (58 chars, A–Z and 2–7). No checksum.
+function isVoiAddressFormat(addr: string): boolean {
+  return /^[A-Z2-7]{58}$/.test(addr)
+}
 
 let cached: IAchievement[] | null = null
 
@@ -42,9 +47,9 @@ export async function GET(req: Request) {
   type Err      = components['schemas']['Error']
   type Category = NonNullable<QueryRaw['category']>
 
-  const CAT_VALUES: readonly Category[] = [
-    'wagering','wins','losses','loyalty','lp','community','game'
-  ] as const
+  const CAT_VALUES: readonly Category[] =
+    ['wagering','wins','losses','loyalty','lp','community','game'] as const
+
   const parseCategory = (v: string | null): Category | undefined =>
     CAT_VALUES.includes(v as Category) ? (v as Category) : undefined
 
@@ -55,13 +60,13 @@ export async function GET(req: Request) {
   const seriesKey = url.searchParams.get('seriesKey') ?? undefined
   const game      = url.searchParams.get('game')      ?? undefined
 
-  if (account && !algosdk.isValidAddress(account)) {
+  if (account && !isVoiAddressFormat(account)) {
     return NextResponse.json<Err>({ error: 'Invalid account' }, { status: 400 })
   }
 
   const achievements = await loadAchievements()
 
-  // helper to convert internal model -> API metadata
+  // convert internal model -> API metadata (and make image URL absolute)
   const toMeta = (a: IAchievement): One => {
     const scope =
       a.display?.scope
@@ -70,11 +75,14 @@ export async function GET(req: Request) {
             : { kind: 'global' as const })
         : undefined
 
+    const relImg = a.imageUrl ?? relImageFromId(a.id)
+    const imgAbs = absolutePublicUrl(req, relImg)
+
     return {
       id: a.id,
       name: a.name,
       description: a.description,
-      imageUrl: a.imageUrl ?? undefined,
+      imageUrl: imgAbs, // absolute for consumers
       display: a.display
         ? {
             category:  a.display.category,
@@ -96,14 +104,12 @@ export async function GET(req: Request) {
     if (!a) {
       return NextResponse.json<Err>({ error: 'Not found' }, { status: 404 })
     }
-    // NOTE: we deliberately do NOT gate on a.hidden here.
-    // Hidden achievements are visible when fetched directly by ID.
     const one = toMeta(a)
-    // Our OpenAPI "200" type is an array; cast to keep types happy without regenerating.
+    // Our OpenAPI 200 is oneOf(single|array) — cast to satisfy TS without regenerating
     return NextResponse.json<Ok>(one as unknown as Ok)
   }
 
-  // --- LIST MODE: keep normal filters and visibility rules ---
+  // --- LIST MODE: filters + normal hidden gating ---
   let list = achievements
   if (category) {
     list = list.filter(a => a.display?.category === category)
@@ -112,10 +118,11 @@ export async function GET(req: Request) {
     list = list.filter(a => a.display?.seriesKey === seriesKey)
   }
   if (game) {
-    list = list.filter(a => a.display?.scope?.kind === 'game' && a.display.scope.gameKey === game)
+    list = list.filter(a =>
+      a.display?.scope?.kind === 'game' && a.display.scope.gameKey === game
+    )
   }
 
-  // visibility gating for hidden items (list mode only)
   const visibility = await Promise.all(
     list.map(async (a) => {
       if (!a.hidden) return true
@@ -129,7 +136,6 @@ export async function GET(req: Request) {
     .filter((_, i) => visibility[i])
     .map(toMeta) as One[]
 
-  // pretty sort
   body.sort((x, y) => {
     const sx = x.display?.seriesKey ?? ''
     const sy = y.display?.seriesKey ?? ''

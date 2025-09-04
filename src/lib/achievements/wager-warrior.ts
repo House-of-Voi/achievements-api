@@ -15,6 +15,10 @@ const HOV_PLAYER_BASE = 'https://voi-mainnet-mimirapi.nftnavigator.xyz/hov/playe
 const VOI_PRICE_URL   = 'https://voirewards.com/api/markets?token=VOI'
 const VOI_DECIMALS = 6
 
+// ---------- Static image helper (served from /public) ----------
+const IMG_BASE = '/achievements/wager-warrior'
+const imageFor = (key: string) => `${IMG_BASE}/wager-warrior-${key}.png`
+
 // ---------- Network / contract helpers ----------
 type Net = 'mainnet' | 'testnet'
 type Network = Net | 'local'
@@ -42,16 +46,15 @@ interface TierDef {
   label: string
   usd: number
   contractAppIds: { mainnet: number; testnet: number }
-  imageUrl?: string
 }
 
 const TIERS: readonly TierDef[] = [
-  { key: '100k', label: '100K',  usd: 100_000,    contractAppIds: { mainnet: 0, testnet: 0 }, imageUrl: 'https://example.com/wager-warrior-100k.png' },
-  { key: '200k', label: '200K',  usd: 200_000,    contractAppIds: { mainnet: 0, testnet: 0 }, imageUrl: 'https://example.com/wager-warrior-200k.png' },
-  { key: '500k', label: '500K',  usd: 500_000,    contractAppIds: { mainnet: 0, testnet: 0 }, imageUrl: 'https://example.com/wager-warrior-500k.png' },
-  { key: '1m',   label: '1M',    usd: 1_000_000,  contractAppIds: { mainnet: 0, testnet: 0 }, imageUrl: 'https://example.com/wager-warrior-1m.png' },
-  { key: '5m',   label: '5M',    usd: 5_000_000,  contractAppIds: { mainnet: 0, testnet: 0 }, imageUrl: 'https://example.com/wager-warrior-5m.png' },
-  { key: '10m',  label: '10M',   usd: 10_000_000, contractAppIds: { mainnet: 0, testnet: 0 }, imageUrl: 'https://example.com/wager-warrior-10m.png' },
+  { key: '100k', label: '100K',  usd: 100_000,    contractAppIds: { mainnet: 0, testnet: 0 } },
+  { key: '200k', label: '200K',  usd: 200_000,    contractAppIds: { mainnet: 0, testnet: 0 } },
+  { key: '500k', label: '500K',  usd: 500_000,    contractAppIds: { mainnet: 0, testnet: 0 } },
+  { key: '1m',   label: '1M',    usd: 1_000_000,  contractAppIds: { mainnet: 0, testnet: 0 } },
+  { key: '5m',   label: '5M',    usd: 5_000_000,  contractAppIds: { mainnet: 0, testnet: 0 } },
+  { key: '10m',  label: '10M',   usd: 10_000_000, contractAppIds: { mainnet: 0, testnet: 0 } },
 ] as const
 
 const fullIdForKey = (key: string) => `wager-warrior-${key}`
@@ -175,7 +178,7 @@ const achievements: IAchievement[] = TIERS.map((t, i) => {
     id,
     name: `Wager Warrior - ${t.label}`,
     description: `Reach a total wagered amount of ${t.label} USD equivalent.`,
-    imageUrl: t.imageUrl,
+    imageUrl: imageFor(t.key),
 
     display: {
       category: AchievementCategory.WAGERING,

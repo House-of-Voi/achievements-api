@@ -3,42 +3,84 @@ import type { IAchievement } from '../types'
 import { AchievementCategory } from '../types'
 import * as utils from '../utils/voi'
 
-// Different number of tiers + global multiplier thresholds
-const TIERS = [
-  { key: 'x25',   label: '25x',   minX: 25 },
-  { key: 'x50',   label: '50x',   minX: 50 },
-  { key: 'x100',  label: '100x',  minX: 100 },
-  { key: 'x500',  label: '500x',  minX: 500 },
-  { key: 'x1000', label: '1000x', minX: 1000 },
+// ---------- logger ----------
+const LP = '[ach:multiplier-master]'
+const nowIso = () => new Date().toISOString()
+const log = (msg: string, data?: Record<string, unknown>) =>
+  (data ? console.log(`${LP} ${nowIso()} ${msg}`, data) : console.log(`${LP} ${nowIso()} ${msg}`))
+
+// ---------- Static image helper (served from /public) ----------
+const IMG_BASE = '/achievements/multiplier-master'
+const imageFor = (key: string) => `${IMG_BASE}/multiplier-master-${key}.png`
+
+// ---------- Network / contract helpers ----------
+type Net = 'mainnet' | 'testnet'
+type Network = Net | 'local'
+const getNetwork = (): Network => {
+  const n = process.env.NETWORK
+  const net: Network = n === 'mainnet' || n === 'testnet' || n === 'local' ? n : 'testnet'
+  log('Resolved NETWORK', { net })
+  return net
+}
+function getLocalAppIds(): Record<string, number> {
+  const raw = process.env.LOCAL_APP_IDS
+  if (!raw) return {}
+  try {
+    const obj = JSON.parse(raw) as Record<string, number>
+    log('Loaded LOCAL_APP_IDS', { keys: Object.keys(obj).length })
+    return obj
+  } catch {
+    log('Failed to parse LOCAL_APP_IDS JSON')
+    return {}
+  }
+}
+
+// ---------- Tiers ----------
+interface TierDef {
+  key: string
+  label: string
+  minX: number
+  contractAppIds: { mainnet: number; testnet: number }
+}
+
+const TIERS: readonly TierDef[] = [
+  { key: 'x25',   label: '25x',   minX: 25,   contractAppIds: { mainnet: 0, testnet: 0 } },
+  { key: 'x50',   label: '50x',   minX: 50,   contractAppIds: { mainnet: 0, testnet: 0 } },
+  { key: 'x100',  label: '100x',  minX: 100,  contractAppIds: { mainnet: 0, testnet: 0 } },
+  { key: 'x500',  label: '500x',  minX: 500,  contractAppIds: { mainnet: 0, testnet: 0 } },
+  { key: 'x1000', label: '1000x', minX: 1000, contractAppIds: { mainnet: 0, testnet: 0 } },
 ] as const
 
-// Optional: per-tier ARC-72 app ids (fill in when deployed)
-const CONTRACT_APP_IDS: Record<string, { mainnet: number; testnet: number }> = {
-  // 'multiplier-master-x25':   { mainnet: 0, testnet: 0 },
-  // 'multiplier-master-x50':   { mainnet: 0, testnet: 0 },
-  // ...
+const fullIdForKey = (key: string) => `multiplier-master-${key}`
+const findTierById = (id: string): TierDef | undefined => {
+  const key = id.replace(/^multiplier-master-/, '')
+  return TIERS.find((t) => t.key === key)
 }
 
 function getAppIdFor(id: string): number {
-  const network = process.env.NETWORK || 'testnet'
-  if (network === 'local') {
-    const localIds = process.env.LOCAL_APP_IDS ? JSON.parse(process.env.LOCAL_APP_IDS) : {}
-    return (localIds as Record<string, number>)[id] || 0
+  const net = getNetwork()
+  if (net === 'local') {
+    const localIds = getLocalAppIds()
+    const appId = localIds[id] || 0
+    log('getAppIdFor(local)', { id, appId })
+    return appId
   }
-  if (network === 'mainnet' || network === 'testnet') {
-    return CONTRACT_APP_IDS[id]?.[network] ?? 0
-  }
-  return 0
+  const tier = findTierById(id)
+  const appId = tier ? tier.contractAppIds[net] ?? 0 : 0
+  log('getAppIdFor', { id, net, appId })
+  return appId
 }
 
-// TODO: replace with your real telemetry/oracle check (casino-wide)
-async function hitMultiplierAtLeast(_account: string, _minX: number): Promise<boolean> {
-  void _account; void _minX
+// ---------- Eligibility stub (replace with real casino-wide telemetry) ----------
+async function hitMultiplierAtLeast(account: string, minX: number): Promise<boolean> {
+  log('hitMultiplierAtLeast() stub', { account, minX })
+  // TODO: plug in your real check (e.g., telemetry/oracle lookup)
   return false
 }
 
+// ---------- Exported achievements ----------
 const achievements: IAchievement[] = TIERS.map((t, i) => {
-  const id = `multiplier-master-${t.key}`
+  const id = fullIdForKey(t.key)
   const tier = i + 1
   const tiersTotal = TIERS.length
 
@@ -46,9 +88,8 @@ const achievements: IAchievement[] = TIERS.map((t, i) => {
     id,
     name: `Multiplier Master — ${t.label}`,
     description: `Hit a single-bet multiplier of at least ${t.label} anywhere in the casino.`,
-    imageUrl: `https://example.com/multiplier-master-${t.key}.png`,
+    imageUrl: imageFor(t.key),
 
-    // Global (casino-wide) display metadata: no game scope
     display: {
       category: AchievementCategory.WINS,
       series: 'Multiplier Master',
@@ -57,22 +98,31 @@ const achievements: IAchievement[] = TIERS.map((t, i) => {
       tiersTotal,
       order: tier,
       tags: ['multiplier', 'casino-wide'],
+      // scope omitted -> global
     },
 
-    contractAppIds: {
-      mainnet: CONTRACT_APP_IDS[id]?.mainnet ?? 0,
-      testnet: CONTRACT_APP_IDS[id]?.testnet ?? 0,
+    contractAppIds: t.contractAppIds,
+    getContractAppId() {
+      const appId = getAppIdFor(this.id)
+      log('getContractAppId()', { id: this.id, appId })
+      return appId
     },
-    getContractAppId() { return getAppIdFor(this.id) },
 
-    // Global requirement: any game qualifies if minX is met
-    checkRequirement: (account) => hitMultiplierAtLeast(account, t.minX),
+    async checkRequirement(account) {
+      log('checkRequirement()', { id, account, minX: t.minX })
+      return hitMultiplierAtLeast(account, t.minX)
+    },
 
-    mint: async (account) => {
+    async mint(account) {
+      log('mint() start', { id, account })
       const appId = getAppIdFor(id)
       const assetId = await utils.getSBTAssetId(appId)
-      if (await utils.hasAchievement(account, assetId)) throw new Error('Already minted')
-      return utils.mintSBT(appId, account)
+      const has = await utils.hasAchievement(account, assetId)
+      log('pre-mint state', { id, appId, assetId, alreadyHas: has })
+      if (has) throw new Error('Already minted')
+      const tx = await utils.mintSBT(appId, account)
+      log('mint() done', { id, account, tx })
+      return tx
     },
 
     enabled: true,

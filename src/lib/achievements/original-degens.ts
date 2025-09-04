@@ -42,22 +42,23 @@ interface TierDef {
   label: string
   usd: number
   contractAppIds: { mainnet: number; testnet: number }
-  imageUrl?: string
 }
 
 // Lower milestone curve for early testers
 const TIERS: readonly TierDef[] = [
-  { key: '100',   label: '100',   usd: 100,    contractAppIds: { mainnet: 0, testnet: 0 }, imageUrl: 'https://example.com/original-degens-100.png' },
-  { key: '250',   label: '250',   usd: 250,    contractAppIds: { mainnet: 0, testnet: 0 }, imageUrl: 'https://example.com/original-degens-250.png' },
-  { key: '500',   label: '500',   usd: 500,    contractAppIds: { mainnet: 0, testnet: 0 }, imageUrl: 'https://example.com/original-degens-500.png' },
-  { key: '1k',    label: '1K',    usd: 1_000,  contractAppIds: { mainnet: 0, testnet: 0 }, imageUrl: 'https://example.com/original-degens-1k.png' },
-  { key: '2_5k',  label: '2.5K',  usd: 2_500,  contractAppIds: { mainnet: 0, testnet: 0 }, imageUrl: 'https://example.com/original-degens-2_5k.png' },
-  { key: '5k',    label: '5K',    usd: 5_000,  contractAppIds: { mainnet: 0, testnet: 0 }, imageUrl: 'https://example.com/original-degens-5k.png' },
-  { key: '10k',   label: '10K',   usd: 10_000, contractAppIds: { mainnet: 0, testnet: 0 }, imageUrl: 'https://example.com/original-degens-10k.png' },
-  { key: '50k',   label: '50K',   usd: 50_000, contractAppIds: { mainnet: 0, testnet: 0 }, imageUrl: 'https://example.com/original-degens-50k.png' }
+  { key: '100',   label: '100',   usd: 100,    contractAppIds: { mainnet: 0, testnet: 0 } },
+  { key: '250',   label: '250',   usd: 250,    contractAppIds: { mainnet: 0, testnet: 0 } },
+  { key: '500',   label: '500',   usd: 500,    contractAppIds: { mainnet: 0, testnet: 0 } },
+  { key: '1k',    label: '1K',    usd: 1_000,  contractAppIds: { mainnet: 0, testnet: 0 } },
+  { key: '2_5k',  label: '2.5K',  usd: 2_500,  contractAppIds: { mainnet: 0, testnet: 0 } },
+  { key: '5k',    label: '5K',    usd: 5_000,  contractAppIds: { mainnet: 0, testnet: 0 } },
+  { key: '10k',   label: '10K',   usd: 10_000, contractAppIds: { mainnet: 0, testnet: 0 } },
+  { key: '50k',   label: '50K',   usd: 50_000, contractAppIds: { mainnet: 0, testnet: 0 } },
 ] as const
 
 const fullIdForKey = (key: string) => `original-degens-${key}`
+const imageForKey  = (key: string) => `/achievements/${fullIdForKey(key)}.png`
+
 const findTierById = (id: string): TierDef | undefined => {
   const key = id.replace(/^original-degens-/, '')
   return TIERS.find((t) => t.key === key)
@@ -176,7 +177,8 @@ const achievements: IAchievement[] = TIERS.map((t, i) => {
     id,
     name: `Original Degens - ${t.label}`,
     description: `As an early tester, reach a total wagered amount of ${t.label} USD equivalent.`,
-    imageUrl: t.imageUrl,
+    // Use static file under /public/achievements/<id>.webp
+    imageUrl: imageForKey(t.key),
 
     display: {
       category: AchievementCategory.WAGERING,
