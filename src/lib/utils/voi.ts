@@ -109,21 +109,26 @@ export async function hasAchievement(
  *
  * Keep the same signature so other code doesn’t break.
  */
+
+type SignedTxn = { txID: string; blob: Uint8Array };
+
 export async function mintSBT(appId: number, account: string): Promise<string> {
   const debug = (process.env.DEBUG || "").toLowerCase() === "true";
   const simulate = (process.env.SIMULATE || "").toLowerCase() === "true";
 
   const { algodClient, indexerClient } = getClients();
 
-  const acc = algosdk.mnemonicToSecretKey(process.env.MN || "");
+  const acc = algosdk.mnemonicToSecretKey(process.env.SIGNER_MNEMONIC || "");
   const { addr, sk } = acc;
+
   const ci = new CONTRACT(
     appId,
     algodClient,
     indexerClient,
     { ...APP_SPEC.contract, events: [] },
-    { addr, sk: new Uint8Array() }
+    { addr, sk: new Uint8Array() } // keep your current behavior (manual signing below)
   );
+
   const mint_costR = await ci.mint_cost();
   ci.setPaymentAmount(mint_costR.returnValue);
   const mintR = await ci.mint(account);
@@ -134,19 +139,29 @@ export async function mintSBT(appId: number, account: string): Promise<string> {
     throw new Error("mintSBT error");
   }
 
-  const stxns = mintR.txns
-    .map((t: string) => new Uint8Array(Buffer.from(t, "base64")))
-    .map((t: Uint8Array) => algosdk.decodeUnsignedTransaction(t))
-    .map((t: any) => algosdk.signTransaction(t, sk));
+  const unsignedBytes: Uint8Array[] = mintR.txns.map(
+    (t: string) => new Uint8Array(Buffer.from(t, "base64"))
+  );
 
-  const { txId } = await algodClient
-    .sendRawTransaction(stxns.map((s: any) => s.blob))
+  const unsignedTxns: algosdk.Transaction[] = unsignedBytes.map((bytes) =>
+    algosdk.decodeUnsignedTransaction(bytes)
+  );
+
+  const stxns: SignedTxn[] = unsignedTxns.map((txn) =>
+    algosdk.signTransaction(txn, sk)
+  );
+
+  const sendResult = await algodClient
+    .sendRawTransaction(stxns.map((s) => s.blob))
     .do();
 
-  if ((globalThis as any).GLOBAL_DEBUG) console.log("txId", txId);
+  const txId: string = (sendResult as { txId: string }).txId;
+
+  const globalFlags = globalThis as { GLOBAL_DEBUG?: boolean };
+  if (globalFlags.GLOBAL_DEBUG) console.log("txId", txId);
 
   await Promise.all(
-    stxns.map((s: any) => algosdk.waitForConfirmation(algodClient, s.txID, 4))
+    stxns.map((s) => algosdk.waitForConfirmation(algodClient, s.txID, 4))
   );
 
   log("mintSBT (stub) called", { appId, account, debug, simulate });
