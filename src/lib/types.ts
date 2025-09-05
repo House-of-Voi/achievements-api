@@ -1,21 +1,21 @@
 // src/lib/types.ts
 export enum AchievementCategory {
-  WAGERING = 'wagering',
-  WINS = 'wins',
-  LOSSES = 'losses',
-  LOYALTY = 'loyalty',
-  LP = 'lp',
-  COMMUNITY = 'community',
-  GAME = 'game',
+  WAGERING = "wagering",
+  WINS = "wins",
+  LOSSES = "losses",
+  LOYALTY = "loyalty",
+  LP = "lp",
+  COMMUNITY = "community",
+  GAME = "game",
 }
 
 export type AchievementScope =
-  | { kind: 'global' }
-  | { kind: 'game'; gameKey: string; gameName?: string };
+  | { kind: "global" }
+  | { kind: "game"; gameKey: string; gameName?: string };
 
 export interface AchievementDisplay {
   category: AchievementCategory;
-  scope?: AchievementScope; 
+  scope?: AchievementScope;
   series?: string;
   seriesKey?: string;
   tier?: number;
@@ -29,7 +29,7 @@ export interface IAchievement {
   name: string;
   description: string;
   imageUrl?: string;
-  contractAppIds: { mainnet: number; testnet: number };
+  contractAppIds: { mainnet: number; testnet: number; localnet: number };
   getContractAppId: () => number;
 
   checkRequirement: (account: string) => Promise<boolean>;
@@ -38,5 +38,5 @@ export interface IAchievement {
   enabled?: boolean;
   hidden?: boolean;
 
-  display?: AchievementDisplay; 
+  display?: AchievementDisplay;
 }
