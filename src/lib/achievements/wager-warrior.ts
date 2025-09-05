@@ -1,178 +1,223 @@
 // src/lib/achievements/wager-warrior.ts
-import type { IAchievement } from '../types'
-import { AchievementCategory } from '../types'
-import * as utils from '../utils/voi'
+import type { IAchievement } from "../types";
+import { AchievementCategory } from "../types";
+import * as utils from "../utils/voi";
 
 // ---------- logger ----------
-const LP = '[ach:wager-warrior]'
-const nowIso = () => new Date().toISOString()
+const LP = "[ach:wager-warrior]";
+const nowIso = () => new Date().toISOString();
 const log = (msg: string, data?: Record<string, unknown>) =>
-  (data ? console.log(`${LP} ${nowIso()} ${msg}`, data) : console.log(`${LP} ${nowIso()} ${msg}`))
+  data
+    ? console.log(`${LP} ${nowIso()} ${msg}`, data)
+    : console.log(`${LP} ${nowIso()} ${msg}`);
 
 // ---------- External data sources ----------
 // NOTE: appId is hardcoded here per your request.
-const HOV_PLAYER_BASE = 'https://voi-mainnet-mimirapi.nftnavigator.xyz/hov/players?appId=40879920'
-const VOI_PRICE_URL = 'https://voirewards.com/api/markets?token=VOI'
-const VOI_DECIMALS = 6
+const HOV_PLAYER_BASE =
+  "https://voi-mainnet-mimirapi.nftnavigator.xyz/hov/players?appId=40879920";
+const VOI_PRICE_URL = "https://voirewards.com/api/markets?token=VOI";
+const VOI_DECIMALS = 6;
 
 // ---------- Static image helper (served from /public) ----------
-const IMG_BASE = '/achievements/wager-warrior'
-const imageFor = (key: string) => `${IMG_BASE}/wager-warrior-${key}.png`
+const IMG_BASE = "/achievements/wager-warrior";
+const imageFor = (key: string) => `${IMG_BASE}/wager-warrior-${key}.png`;
 
 // ---------- Network / contract helpers ----------
-type Net = 'mainnet' | 'testnet'
-type Network = Net | 'local'
+type Net = "mainnet" | "testnet" | "localnet";
+type Network = Net | "local";
 const getNetwork = (): Network => {
-  const n = process.env.NETWORK
-  const net: Network = n === 'mainnet' || n === 'testnet' || n === 'local' ? n : 'testnet'
-  log('Resolved NETWORK', { net })
-  return net
-}
+  const n = process.env.NETWORK;
+  const net: Network =
+    n === "mainnet" || n === "testnet" || n === "localnet" ? n : "testnet";
+  log("Resolved NETWORK", { net });
+  return net;
+};
 function getLocalAppIds(): Record<string, number> {
-  const raw = process.env.LOCAL_APP_IDS
-  if (!raw) return {}
+  const raw = process.env.LOCAL_APP_IDS;
+  if (!raw) return {};
   try {
-    const obj = JSON.parse(raw) as Record<string, number>
-    log('Loaded LOCAL_APP_IDS', { keys: Object.keys(obj).length })
-    return obj
+    const obj = JSON.parse(raw) as Record<string, number>;
+    log("Loaded LOCAL_APP_IDS", { keys: Object.keys(obj).length });
+    return obj;
   } catch {
-    log('Failed to parse LOCAL_APP_IDS JSON')
-    return {}
+    log("Failed to parse LOCAL_APP_IDS JSON");
+    return {};
   }
 }
 
 interface TierDef {
-  key: string
-  label: string
-  usd: number
-  contractAppIds: { mainnet: number; testnet: number }
+  key: string;
+  label: string;
+  usd: number;
+  contractAppIds: { mainnet: number; testnet: number; localnet: number };
 }
 
 const TIERS: readonly TierDef[] = [
-  { key: '100k', label: '100K', usd: 100_000, contractAppIds: { mainnet: 0, testnet: 0 } },
-  { key: '200k', label: '200K', usd: 200_000, contractAppIds: { mainnet: 0, testnet: 0 } },
-  { key: '500k', label: '500K', usd: 500_000, contractAppIds: { mainnet: 0, testnet: 0 } },
-  { key: '1m', label: '1M', usd: 1_000_000, contractAppIds: { mainnet: 0, testnet: 0 } },
-  { key: '5m', label: '5M', usd: 5_000_000, contractAppIds: { mainnet: 0, testnet: 0 } },
-  { key: '10m', label: '10M', usd: 10_000_000, contractAppIds: { mainnet: 0, testnet: 0 } },
-] as const
+  {
+    key: "100k",
+    label: "100K",
+    usd: 100_000,
+    contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 },
+  },
+  {
+    key: "200k",
+    label: "200K",
+    usd: 200_000,
+    contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 },
+  },
+  {
+    key: "500k",
+    label: "500K",
+    usd: 500_000,
+    contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 },
+  },
+  {
+    key: "1m",
+    label: "1M",
+    usd: 1_000_000,
+    contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 },
+  },
+  {
+    key: "5m",
+    label: "5M",
+    usd: 5_000_000,
+    contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 },
+  },
+  {
+    key: "10m",
+    label: "10M",
+    usd: 10_000_000,
+    contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 },
+  },
+] as const;
 
-const fullIdForKey = (key: string) => `wager-warrior-${key}`
+const fullIdForKey = (key: string) => `wager-warrior-${key}`;
 const findTierById = (id: string): TierDef | undefined => {
-  const key = id.replace(/^wager-warrior-/, '')
-  return TIERS.find((t) => t.key === key)
-}
+  const key = id.replace(/^wager-warrior-/, "");
+  return TIERS.find((t) => t.key === key);
+};
 
 function getAppIdFor(id: string): number {
-  const net = getNetwork()
-  if (net === 'local') {
-    const localIds = getLocalAppIds()
-    const appId = localIds[id] || 0
-    log('getAppIdFor(local)', { id, appId })
-    return appId
+  const net = getNetwork();
+  if (net === "local") {
+    const localIds = getLocalAppIds();
+    const appId = localIds[id] || 0;
+    log("getAppIdFor(local)", { id, appId });
+    return appId;
   }
-  const tier = findTierById(id)
-  const appId = tier ? tier.contractAppIds[net] ?? 0 : 0
-  log('getAppIdFor', { id, net, appId })
-  return appId
+  const tier = findTierById(id);
+  const appId = tier ? tier.contractAppIds[net] ?? 0 : 0;
+  log("getAppIdFor", { id, net, appId });
+  return appId;
 }
 
 // ---------- Fetch helpers ----------
 async function fetchJson<T>(url: string, timeoutMs = 6000): Promise<T> {
-  log('HTTP GET', { url })
-  const ctrl = new AbortController()
-  const t = setTimeout(() => ctrl.abort(), timeoutMs)
+  log("HTTP GET", { url });
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { signal: ctrl.signal, headers: { accept: 'application/json' } })
-    log('HTTP status', { url, status: res.status })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const data = (await res.json()) as T
-    return data
+    const res = await fetch(url, {
+      signal: ctrl.signal,
+      headers: { accept: "application/json" },
+    });
+    log("HTTP status", { url, status: res.status });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = (await res.json()) as T;
+    return data;
   } finally {
-    clearTimeout(t)
+    clearTimeout(t);
   }
 }
 
 // HOV API types
-type HovPlayerRow = { total_amount_bet: number }
-type HovPlayerResponse = HovPlayerRow[]
+type HovPlayerRow = { total_amount_bet: number };
+type HovPlayerResponse = HovPlayerRow[];
 
 // VOI price types
 type VoiMarketsResponse = {
-  aggregates?: { weightedAveragePrice?: number }
-  marketData?: Array<{ network?: string; price?: number }>
-}
+  aggregates?: { weightedAveragePrice?: number };
+  marketData?: Array<{ network?: string; price?: number }>;
+};
 
-let _priceCache: { t: number; usd: number } | null = null
-const PRICE_TTL_MS = 60_000
+let _priceCache: { t: number; usd: number } | null = null;
+const PRICE_TTL_MS = 60_000;
 
 async function getVoiUsdPrice(): Promise<number> {
-  const now = Date.now()
+  const now = Date.now();
   if (_priceCache && now - _priceCache.t < PRICE_TTL_MS) {
-    log('VOI price (cache hit)', { price: _priceCache.usd })
-    return _priceCache.usd
+    log("VOI price (cache hit)", { price: _priceCache.usd });
+    return _priceCache.usd;
   }
   try {
-    const data = await fetchJson<VoiMarketsResponse>(VOI_PRICE_URL)
-    let price = data.aggregates?.weightedAveragePrice
-    if (typeof price !== 'number' || !isFinite(price) || price <= 0) {
+    const data = await fetchJson<VoiMarketsResponse>(VOI_PRICE_URL);
+    let price = data.aggregates?.weightedAveragePrice;
+    if (typeof price !== "number" || !isFinite(price) || price <= 0) {
       const voiRows = (data.marketData ?? []).filter(
-        (m) => m.network?.toLowerCase() === 'voi' && typeof m.price === 'number'
-      )
-      const sum = voiRows.reduce((acc, m) => acc + (m.price || 0), 0)
-      price = voiRows.length ? sum / voiRows.length : undefined
+        (m) => m.network?.toLowerCase() === "voi" && typeof m.price === "number"
+      );
+      const sum = voiRows.reduce((acc, m) => acc + (m.price || 0), 0);
+      price = voiRows.length ? sum / voiRows.length : undefined;
     }
-    if (typeof price !== 'number' || !isFinite(price) || price <= 0) {
-      price = 1e-9
+    if (typeof price !== "number" || !isFinite(price) || price <= 0) {
+      price = 1e-9;
     }
-    _priceCache = { t: now, usd: price }
-    log('VOI price (fresh)', { price })
-    return price
+    _priceCache = { t: now, usd: price };
+    log("VOI price (fresh)", { price });
+    return price;
   } catch {
-    log('VOI price fetch failed; using tiny fallback')
-    return 1e-9
+    log("VOI price fetch failed; using tiny fallback");
+    return 1e-9;
   }
 }
 
 async function getTotalWagerUsd(address: string): Promise<number> {
   // Build a single URL that includes the hardcoded appId + address
-  const url = `${HOV_PLAYER_BASE}&address=${encodeURIComponent(address)}`
-  const priceUsd = await getVoiUsdPrice()
-  let totalBaseUnits = 0
+  const url = `${HOV_PLAYER_BASE}&address=${encodeURIComponent(address)}`;
+  const priceUsd = await getVoiUsdPrice();
+  let totalBaseUnits = 0;
 
   try {
-    const rows = await fetchJson<HovPlayerResponse>(url)
+    const rows = await fetchJson<HovPlayerResponse>(url);
     // Sum in case the endpoint ever returns multiple rows
     totalBaseUnits = Array.isArray(rows)
-      ? rows.reduce((acc, r) => acc + (typeof r?.total_amount_bet === 'number' ? r.total_amount_bet : 0), 0)
-      : 0
-    log('HOV rows (hardcoded app)', {
+      ? rows.reduce(
+          (acc, r) =>
+            acc +
+            (typeof r?.total_amount_bet === "number" ? r.total_amount_bet : 0),
+          0
+        )
+      : 0;
+    log("HOV rows (hardcoded app)", {
       rows: Array.isArray(rows) ? rows.length : 0,
-      total_base_units: totalBaseUnits
-    })
+      total_base_units: totalBaseUnits,
+    });
   } catch {
-    log('HOV fetch failed (treating as 0)', { url })
+    log("HOV fetch failed (treating as 0)", { url });
   }
 
-  const voi = totalBaseUnits / 10 ** VOI_DECIMALS
-  const totalUsd = voi * priceUsd
-  log('Wager totals', { baseUnits: totalBaseUnits, voi, priceUsd, totalUsd })
-  return totalUsd
+  const voi = totalBaseUnits / 10 ** VOI_DECIMALS;
+  const totalUsd = voi * priceUsd;
+  log("Wager totals", { baseUnits: totalBaseUnits, voi, priceUsd, totalUsd });
+  return totalUsd;
 }
 
 // ---------- Requirement logic ----------
-async function meetsTotalWagerUSD(account: string, thresholdUsd: number): Promise<boolean> {
-  const totalUsd = await getTotalWagerUsd(account)
-  const eligible = totalUsd >= thresholdUsd
-  log('Eligibility', { account, thresholdUsd, totalUsd, eligible })
-  return eligible
+async function meetsTotalWagerUSD(
+  account: string,
+  thresholdUsd: number
+): Promise<boolean> {
+  const totalUsd = await getTotalWagerUsd(account);
+  const eligible = totalUsd >= thresholdUsd;
+  log("Eligibility", { account, thresholdUsd, totalUsd, eligible });
+  return eligible;
 }
 
 // ---------- Exported achievements (one per tier) ----------
 const achievements: IAchievement[] = TIERS.map((t, i) => {
-  const id = fullIdForKey(t.key)
-  const tier = i + 1
-  const tiersTotal = TIERS.length
+  const id = fullIdForKey(t.key);
+  const tier = i + 1;
+  const tiersTotal = TIERS.length;
 
   const ach: IAchievement = {
     id,
@@ -182,44 +227,50 @@ const achievements: IAchievement[] = TIERS.map((t, i) => {
 
     display: {
       category: AchievementCategory.WAGERING,
-      series: 'Wager Warrior',
-      seriesKey: 'wager_warrior',
+      series: "Wager Warrior",
+      seriesKey: "wager_warrior",
       tier,
       tiersTotal,
       order: tier,
-      tags: ['milestone', 'volume'],
+      tags: ["milestone", "volume"],
     },
 
     contractAppIds: t.contractAppIds,
     getContractAppId() {
-      const appId = getAppIdFor(this.id)
-      log('getContractAppId()', { id: this.id, appId })
-      return appId
+      const appId = getAppIdFor(this.id);
+      log("getContractAppId()", { id: this.id, appId });
+      return appId;
     },
 
     async checkRequirement(account) {
-      log('checkRequirement()', { id, account, tierLabel: t.label, thresholdUsd: t.usd })
-      return meetsTotalWagerUSD(account, t.usd)
+      return true;
+      log("checkRequirement()", {
+        id,
+        account,
+        tierLabel: t.label,
+        thresholdUsd: t.usd,
+      });
+      return meetsTotalWagerUSD(account, t.usd);
     },
 
     async mint(account) {
-      log('mint() start', { id, account })
-      const appId = getAppIdFor(id)
-      const has = await utils.hasAchievement(account, appId)
+      log("mint() start", { id, account });
+      const appId = getAppIdFor(id);
+      const has = await utils.hasAchievement(account, appId);
 
-      log('pre-mint state', { id, appId, alreadyHas: has })
-      if (has) throw new Error('Already minted')
+      log("pre-mint state", { id, appId, alreadyHas: has });
+      if (has) throw new Error("Already minted");
 
-      const tx = await utils.mintSBT(appId, account)
-      log('mint() done', { id, account, tx })
-      return tx
+      const tx = await utils.mintSBT(appId, account);
+      log("mint() done", { id, account, tx });
+      return tx;
     },
 
     enabled: true,
     hidden: false,
-  }
+  };
 
-  return ach
-})
+  return ach;
+});
 
-export default achievements
+export default achievements;

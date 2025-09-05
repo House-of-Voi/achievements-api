@@ -1,6 +1,8 @@
 import algosdk from "algosdk";
 import { CONTRACT } from "ulujs";
 import { APP_SPEC } from "../../clients/MintableSBNFTClient";
+import dotenv from "dotenv";
+dotenv.config();
 
 /**
  * VOI helpers for achievements API
@@ -33,14 +35,14 @@ const getNet = (): Net => {
 
 export const getClients = () => {
   const algodClient = new algosdk.Algodv2(
-    "",
-    "https://mainnet-api.voi.nodely.dev",
-    443
+    process.env.VOI_NODE_TOKEN || "",
+    process.env.VOI_NODE || "https://mainnet-api.voi.nodely.dev",
+    process.env.VOI_NODE_PORT ? Number(process.env.VOI_NODE_PORT) : 443
   );
   const indexerClient = new algosdk.Indexer(
-    "",
-    "https://mainnet-idx.voi.nodely.dev",
-    443
+    process.env.VOI_NODE_TOKEN || "",
+    process.env.VOI_NODE || "https://mainnet-idx.voi.nodely.dev",
+    process.env.VOI_NODE_PORT ? Number(process.env.VOI_NODE_PORT) : 443
   );
   return { algodClient, indexerClient };
 };

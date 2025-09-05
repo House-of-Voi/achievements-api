@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "deploy": "tsx scripts/deploy.ts",
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
     "start": "next start",
@@ -28,10 +29,12 @@
     "@types/node": "^20.19.11",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dotenv": "^17.2.2",
     "eslint": "^9",
     "eslint-config-next": "15.5.2",
     "next-test-api-route-handler": "^5.0.2",
     "openapi-typescript": "^7.9.1",
+    "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "vitest": "^3.2.4"
   }
