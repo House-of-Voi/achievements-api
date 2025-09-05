@@ -8,7 +8,8 @@ import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
 import type { IAchievement } from "@/lib/types";
-dotenv.config();
+dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
+
 
 // Optional: declare a typed global debug flag so we don't need `as any`
 declare global {
