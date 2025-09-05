@@ -12,26 +12,32 @@ const log = (msg: string, data?: Record<string, unknown>) =>
     : console.log(`${LP} ${nowIso()} ${msg}`);
 
 // ---------- External data sources ----------
-// NOTE: appId is hardcoded here per your request.
 const HOV_PLAYER_BASE =
   "https://voi-mainnet-mimirapi.nftnavigator.xyz/hov/players?appId=40879920";
 const VOI_PRICE_URL = "https://voirewards.com/api/markets?token=VOI";
 const VOI_DECIMALS = 6;
 
-// ---------- Static image helper (served from /public) ----------
+// ---------- Static image helper ----------
 const IMG_BASE = "/achievements/wager-warrior";
 const imageFor = (key: string) => `${IMG_BASE}/wager-warrior-${key}.png`;
 
 // ---------- Network / contract helpers ----------
-type Net = "mainnet" | "testnet" | "localnet";
-type Network = Net | "local";
-const getNetwork = (): Network => {
-  const n = process.env.NETWORK;
-  const net: Network =
-    n === "mainnet" || n === "testnet" || n === "localnet" ? n : "testnet";
-  log("Resolved NETWORK", { net });
-  return net;
+type ChainNet = "mainnet" | "testnet" | "localnet";
+
+const getNetwork = (): ChainNet => {
+  const raw = (process.env.NETWORK || "").toLowerCase();
+  if (raw === "mainnet" || raw === "testnet" || raw === "localnet") {
+    log("Resolved NETWORK", { net: raw });
+    return raw;
+  }
+  if (raw === "local" || raw === "devnet") {
+    log("Resolved NETWORK", { net: "localnet", from: raw });
+    return "localnet";
+  }
+  log("Resolved NETWORK (default)", { net: "testnet", from: raw || "(unset)" });
+  return "testnet";
 };
+
 function getLocalAppIds(): Record<string, number> {
   const raw = process.env.LOCAL_APP_IDS;
   if (!raw) return {};
@@ -53,42 +59,12 @@ interface TierDef {
 }
 
 const TIERS: readonly TierDef[] = [
-  {
-    key: "100k",
-    label: "100K",
-    usd: 100_000,
-    contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 },
-  },
-  {
-    key: "200k",
-    label: "200K",
-    usd: 200_000,
-    contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 },
-  },
-  {
-    key: "500k",
-    label: "500K",
-    usd: 500_000,
-    contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 },
-  },
-  {
-    key: "1m",
-    label: "1M",
-    usd: 1_000_000,
-    contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 },
-  },
-  {
-    key: "5m",
-    label: "5M",
-    usd: 5_000_000,
-    contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 },
-  },
-  {
-    key: "10m",
-    label: "10M",
-    usd: 10_000_000,
-    contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 },
-  },
+  { key: "100k", label: "100K", usd: 100_000, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
+  { key: "200k", label: "200K", usd: 200_000, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
+  { key: "500k", label: "500K", usd: 500_000, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
+  { key: "1m",   label: "1M",   usd: 1_000_000, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
+  { key: "5m",   label: "5M",   usd: 5_000_000, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
+  { key: "10m",  label: "10M",  usd: 10_000_000, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
 ] as const;
 
 const fullIdForKey = (key: string) => `wager-warrior-${key}`;
@@ -99,15 +75,17 @@ const findTierById = (id: string): TierDef | undefined => {
 
 function getAppIdFor(id: string): number {
   const net = getNetwork();
-  if (net === "local") {
+  if (net === "localnet") {
     const localIds = getLocalAppIds();
     const appId = localIds[id] || 0;
-    log("getAppIdFor(local)", { id, appId });
+    log("getAppIdFor(localnet)", { id, appId });
     return appId;
   }
   const tier = findTierById(id);
-  const appId = tier ? tier.contractAppIds[net] ?? 0 : 0;
-  log("getAppIdFor", { id, net, appId });
+  // Narrow to the two chain keys that exist on contractAppIds
+  const chainNet: Extract<ChainNet, "mainnet" | "testnet"> = net === "mainnet" ? "mainnet" : "testnet";
+  const appId = tier ? tier.contractAppIds[chainNet] ?? 0 : 0;
+  log("getAppIdFor", { id, net: chainNet, appId });
   return appId;
 }
 
@@ -123,8 +101,7 @@ async function fetchJson<T>(url: string, timeoutMs = 6000): Promise<T> {
     });
     log("HTTP status", { url, status: res.status });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = (await res.json()) as T;
-    return data;
+    return (await res.json()) as T;
   } finally {
     clearTimeout(t);
   }
@@ -160,26 +137,24 @@ async function getVoiUsdPrice(): Promise<number> {
       price = voiRows.length ? sum / voiRows.length : undefined;
     }
     if (typeof price !== "number" || !isFinite(price) || price <= 0) {
-      price = 1e-9;
+      price = 0;
     }
     _priceCache = { t: now, usd: price };
     log("VOI price (fresh)", { price });
     return price;
   } catch {
     log("VOI price fetch failed; using tiny fallback");
-    return 1e-9;
+    return 0;
   }
 }
 
 async function getTotalWagerUsd(address: string): Promise<number> {
-  // Build a single URL that includes the hardcoded appId + address
   const url = `${HOV_PLAYER_BASE}&address=${encodeURIComponent(address)}`;
   const priceUsd = await getVoiUsdPrice();
   let totalBaseUnits = 0;
 
   try {
     const rows = await fetchJson<HovPlayerResponse>(url);
-    // Sum in case the endpoint ever returns multiple rows
     totalBaseUnits = Array.isArray(rows)
       ? rows.reduce(
           (acc, r) =>
@@ -243,7 +218,6 @@ const achievements: IAchievement[] = TIERS.map((t, i) => {
     },
 
     async checkRequirement(account) {
-      return true;
       log("checkRequirement()", {
         id,
         account,
@@ -257,6 +231,10 @@ const achievements: IAchievement[] = TIERS.map((t, i) => {
       log("mint() start", { id, account });
       const appId = getAppIdFor(id);
       const has = await utils.hasAchievement(account, appId);
+
+      if (!appId) {
+        throw new Error(`No contractAppId configured for ${getNetwork()} (${id})`);
+      }
 
       log("pre-mint state", { id, appId, alreadyHas: has });
       if (has) throw new Error("Already minted");

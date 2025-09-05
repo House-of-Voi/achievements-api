@@ -10,6 +10,11 @@ import fs from "fs";
 import type { IAchievement } from "@/lib/types";
 dotenv.config();
 
+// Optional: declare a typed global debug flag so we don't need `as any`
+declare global {
+  var GLOBAL_DEBUG: boolean | undefined;
+}
+
 function stripTrailingZeroBytes(str: string) {
   return str.replace(/\0+$/, "");
 }
@@ -19,21 +24,46 @@ function padStringWithZeroBytes(input: string, length: number): string {
   return paddingLength > 0 ? input + "\0".repeat(paddingLength) : input;
 }
 
+// Precise type for a signed txn returned by algosdk.signTransaction
+type SignedTxn = { txID: string; blob: Uint8Array };
+
+// What waitForConfirmation returns (subset we use)
+type PendingTxInfo = {
+  ["confirmed-round"]?: number;
+  confirmedRound?: number;
+  ["pool-error"]?: string;
+  txID?: string;
+  [k: string]: unknown;
+};
+
+// Send helper (typed)
 const signSendAndConfirm = async (
   algodClient: algosdk.Algodv2,
   txns: string[],
   sk: Uint8Array
-) => {
-  const stxns = txns
-    .map((t) => new Uint8Array(Buffer.from(t, "base64")))
-    .map((t) => algosdk.decodeUnsignedTransaction(t))
-    .map((t: any) => algosdk.signTransaction(t, sk));
-  const res = await algodClient
-    .sendRawTransaction(stxns.map((s: any) => s.blob))
-    .do();
-  if ((globalThis as any).GLOBAL_DEBUG) console.log(res);
-  return await Promise.all(
-    stxns.map((s: any) => algosdk.waitForConfirmation(algodClient, s.txID, 4))
+): Promise<PendingTxInfo[]> => {
+  const unsignedBytes: Uint8Array[] = txns.map(
+    (t) => new Uint8Array(Buffer.from(t, "base64"))
+  );
+
+  const unsigned: algosdk.Transaction[] = unsignedBytes.map((b) =>
+    algosdk.decodeUnsignedTransaction(b)
+  );
+
+  const signed: SignedTxn[] = unsigned.map((u) =>
+    algosdk.signTransaction(u, sk) as SignedTxn
+  );
+
+  const blobs: Uint8Array[] = signed.map((s) => s.blob);
+  const res = await algodClient.sendRawTransaction(blobs).do();
+
+  if (globalThis.GLOBAL_DEBUG) console.log(res);
+
+  // Confirm each txID
+  return Promise.all(
+    signed.map((s) =>
+      algosdk.waitForConfirmation(algodClient, s.txID, 4) as Promise<PendingTxInfo>
+    )
   );
 };
 
@@ -42,17 +72,14 @@ async function loadAllAchievements(
   achievementFilePath: string
 ): Promise<IAchievement[]> {
   try {
-    // Resolve the absolute path
     const absolutePath = path.resolve(achievementFilePath);
 
-    // Check if file exists
     if (!fs.existsSync(absolutePath)) {
       throw new Error(`Achievement file not found: ${absolutePath}`);
     }
 
     console.log(`📄 Loading achievement config from: ${absolutePath}`);
 
-    // Import the achievement module
     const achievementModule = await import(absolutePath);
     const achievements: IAchievement[] = achievementModule.default;
 
@@ -70,8 +97,6 @@ async function loadAllAchievements(
 
 // Generate metadata URI for the achievement
 function generateMetadataURI(achievement: IAchievement): string {
-  // You can customize this based on your metadata hosting setup
-  // For now, we'll use a placeholder that includes the achievement ID
   const baseUrl =
     process.env.METADATA_BASE_URL || "https://achievements-api.example.com";
   return `${baseUrl}/metadata/${achievement.id}.json`;
@@ -90,6 +115,15 @@ function needsDeployment(achievement: IAchievement): boolean {
   return !appId || appId === 0;
 }
 
+// Type the params object passed to MintableSbnftClient
+type AppClientParams = {
+  resolveBy: "creatorAndName";
+  findExistingUsing: algosdk.Indexer;
+  creatorAddress: string;
+  name: string;
+  sender: { addr: string; sk: Uint8Array };
+};
+
 // Deploy ARC-72 contract for a specific achievement
 async function deploySingleAchievement(
   achievement: IAchievement,
@@ -107,34 +141,42 @@ async function deploySingleAchievement(
   console.log(`📋 Description: ${achievement.description}`);
   console.log(`${"=".repeat(80)}`);
 
-  // Use achievement ID as the contract name for uniqueness
   const contractName = `achievement-${achievement.id}`;
 
-  const clientParams: any = {
+  // Use `as const` to keep literal types (not widened to string)
+  const clientParams = {
     resolveBy: "creatorAndName",
     findExistingUsing: indexerClient,
     creatorAddress: deployer.addr,
     name: contractName,
-    sender: deployer,
-  };
+    sender: { addr: deployer.addr, sk: deployer.sk },
+  } as const satisfies AppClientParams;
 
   const appClient = new Client(clientParams, algodClient);
 
   console.log(`📝 Contract name: ${contractName}`);
 
-  const app = await appClient.deploy({
+    const app = await appClient.deploy({
     deployTimeParams: {},
     onUpdate: "update",
     onSchemaBreak: "fail",
   });
 
-  if (!app.appId) {
+  const appIdRaw = app.appId as number | bigint | undefined;
+  if (!appIdRaw) {
     throw new Error("Failed to deploy contract");
   }
 
-  const { appId } = app;
+  // Normalize to number for the rest of this script
+  const appId =
+    typeof appIdRaw === "bigint" ? Number(appIdRaw) : appIdRaw;
+
+  if (!Number.isSafeInteger(appId)) {
+    throw new Error(`App ID is not a safe integer: ${String(appIdRaw)}`);
+  }
 
   console.log(`🎉 App ID: ${appId}`);
+
 
   const ci = new CONTRACT(
     Number(appId),
@@ -151,7 +193,7 @@ async function deploySingleAchievement(
 
   const postUpdateR = await ci.post_update();
   if (!postUpdateR.success) {
-    throw new Error("Failed to post update", postUpdateR);
+    throw new Error("Failed to post update");
   }
 
   const res0 = await signSendAndConfirm(
@@ -160,7 +202,8 @@ async function deploySingleAchievement(
     deployer.sk
   );
 
-  console.log(`  ✅ Confirmed round: ${res0[0]["confirmed-round"]}`);
+  const round0 = res0[0]["confirmed-round"] ?? res0[0].confirmedRound ?? "unknown";
+  console.log(`  ✅ Confirmed round: ${round0}`);
   console.log(
     "  📄 Confirmed txid:",
     algosdk
@@ -176,7 +219,7 @@ async function deploySingleAchievement(
   ci.setPaymentAmount(bootstrapCost.returnValue);
   const bootstrapR = await ci.bootstrap();
   if (!bootstrapR.success) {
-    throw new Error("Failed to bootstrap", bootstrapR);
+    throw new Error("Failed to bootstrap");
   }
 
   const res1 = await signSendAndConfirm(
@@ -185,7 +228,8 @@ async function deploySingleAchievement(
     deployer.sk
   );
 
-  console.log(`  ✅ Confirmed round: ${res1[0]["confirmed-round"]}`);
+  const round1 = res1[0]["confirmed-round"] ?? res1[0].confirmedRound ?? "unknown";
+  console.log(`  ✅ Confirmed round: ${round1}`);
   console.log(
     "  📄 Confirmed txid:",
     algosdk
@@ -203,7 +247,7 @@ async function deploySingleAchievement(
 
   if (!approveMinterR.success) {
     console.log(approveMinterR);
-    throw new Error("Failed to approve minter", approveMinterR);
+    throw new Error("Failed to approve minter");
   }
 
   const res2 = await signSendAndConfirm(
@@ -212,7 +256,8 @@ async function deploySingleAchievement(
     deployer.sk
   );
 
-  console.log(`  ✅ Confirmed round: ${res2[0]["confirmed-round"]}`);
+  const round2 = res2[0]["confirmed-round"] ?? res2[0].confirmedRound ?? "unknown";
+  console.log(`  ✅ Confirmed round: ${round2}`);
   console.log(
     "  📄 Confirmed txid:",
     algosdk
@@ -222,7 +267,6 @@ async function deploySingleAchievement(
       .txID()
   );
 
-  // Generate metadata URI based on achievement
   const metadataURI = generateMetadataURI(achievement);
   console.log(`🔗 Setting metadata URI... ${metadataURI}`);
 
@@ -232,7 +276,7 @@ async function deploySingleAchievement(
     new Uint8Array(Buffer.from(padStringWithZeroBytes(metadataURI, 256)))
   );
   if (!setMetadataURIR.success) {
-    throw new Error("Failed to set metadata URI", setMetadataURIR);
+    throw new Error("Failed to set metadata URI");
   }
 
   const res3 = await signSendAndConfirm(
@@ -241,13 +285,13 @@ async function deploySingleAchievement(
     deployer.sk
   );
 
-  console.log(`  ✅ Confirmed round: ${res3[0]["confirmed-round"]}`);
+  const round3 = res3[0]["confirmed-round"] ?? res3[0].confirmedRound ?? "unknown";
+  console.log(`  ✅ Confirmed round: ${round3}`);
   console.log(
     "  📄 Confirmed txid:",
     algosdk
       .decodeUnsignedTransaction(
-        new Uint8Array(Buffer.from(setMetadataURIR.txns[0], "base64"))
-      )
+        new Uint8Array(Buffer.from(setMetadataURIR.txns[0], "base64")))
       .txID()
   );
 
@@ -268,7 +312,6 @@ async function deploySingleAchievement(
 
 // Deploy ARC-72 contracts for all achievements in the file
 async function deploy(achievementFilePath?: string) {
-  // Parse command line arguments
   const args = process.argv.slice(2);
   let filePath = achievementFilePath;
 
@@ -287,10 +330,8 @@ async function deploy(achievementFilePath?: string) {
     process.exit(1);
   }
 
-  // Load all achievements from the file
   const achievements = await loadAllAchievements(filePath);
 
-  // Filter achievements that need deployment
   const achievementsToDeployment = achievements.filter(needsDeployment);
 
   console.log(`\n🔍 Analysis:`);
@@ -308,13 +349,11 @@ async function deploy(achievementFilePath?: string) {
     return;
   }
 
-  // Show which achievements will be deployed
   console.log(`\n📋 Achievements to deploy:`);
   achievementsToDeployment.forEach((achievement, index) => {
     console.log(`  ${index + 1}. ${achievement.name} (${achievement.id})`);
   });
 
-  // Validate required environment variables
   const requiredEnvVars = {
     VOI_NODE: process.env.VOI_NODE,
     VOI_INDEXER: process.env.VOI_INDEXER,
@@ -335,8 +374,8 @@ async function deploy(achievementFilePath?: string) {
   });
 
   const missingVars = Object.entries(requiredEnvVars)
-    .filter(([_, value]) => !value)
-    .map(([key, _]) => key);
+    .filter(([, value]) => !value)
+    .map(([key]) => key);
 
   if (missingVars.length > 0) {
     console.error("❌ Missing required environment variables:");
@@ -350,7 +389,6 @@ async function deploy(achievementFilePath?: string) {
     process.exit(1);
   }
 
-  // Validate mnemonic format (should be 25 words)
   const mnemonicWords = process.env.SIGNER_MNEMONIC!.split(" ");
   if (mnemonicWords.length !== 25) {
     console.error("❌ SIGNER_MNEMONIC must be a 25-word mnemonic phrase");
@@ -360,7 +398,6 @@ async function deploy(achievementFilePath?: string) {
 
   console.log("✅ Environment variables validated");
 
-  // Node + token/port pulled from env (empty strings are fine for public nodes)
   const algodClient = new algosdk.Algodv2(
     process.env.VOI_NODE_TOKEN || "",
     process.env.VOI_NODE!,
@@ -378,7 +415,6 @@ async function deploy(achievementFilePath?: string) {
   console.log(`\n👤 Deployer address: ${deployer.addr}`);
   console.log(`🌐 Network: ${process.env.NETWORK || "mainnet"}`);
 
-  // Deploy each achievement
   const deploymentResults: Array<{
     achievement: IAchievement;
     appId: number;
@@ -404,7 +440,6 @@ async function deploy(achievementFilePath?: string) {
         metadataURI: result.metadataURI,
       });
 
-      // Small delay between deployments to avoid rate limits
       if (i < achievementsToDeployment.length - 1) {
         console.log("⏳ Waiting 2 seconds before next deployment...");
         await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -415,7 +450,6 @@ async function deploy(achievementFilePath?: string) {
     }
   }
 
-  // Final summary
   console.log(`\n${"=".repeat(80)}`);
   console.log("🎉 DEPLOYMENT SUMMARY");
   console.log(`${"=".repeat(80)}`);
@@ -443,7 +477,12 @@ async function deploy(achievementFilePath?: string) {
     );
     deploymentResults.forEach(({ achievement, appId }) => {
       const network = process.env.NETWORK || "mainnet";
-      const currentNetwork = network === "localnet" ? "localnet" : network === "testnet" ? "testnet" : "mainnet";
+      const currentNetwork =
+        network === "localnet"
+          ? "localnet"
+          : network === "testnet"
+          ? "testnet"
+          : "mainnet";
       console.log(`${achievement.id}: { ${currentNetwork}: ${appId} }`);
     });
   }

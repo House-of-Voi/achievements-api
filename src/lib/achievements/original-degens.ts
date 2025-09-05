@@ -12,7 +12,6 @@ const log = (msg: string, data?: Record<string, unknown>) =>
     : console.log(`${LP} ${nowIso()} ${msg}`);
 
 // ---------- External data sources ----------
-// NOTE: per your request, appId is hardcoded in the base URL (same behavior as Wager Warrior).
 const HOV_PLAYER_BASE =
   "https://voi-mainnet-mimirapi.nftnavigator.xyz/hov/players?appId=40879920";
 const VOI_PRICE_URL = "https://voirewards.com/api/markets?token=VOI";
@@ -20,14 +19,19 @@ const VOI_DECIMALS = 6;
 
 // ---------- Network / contract helpers ----------
 type Net = "mainnet" | "testnet";
-type Network = Net | "local";
+type Network = Net | "localnet";
+
 const getNetwork = (): Network => {
-  const n = process.env.NETWORK;
-  const net: Network =
-    n === "mainnet" || n === "testnet" || n === "local" ? n : "testnet";
-  log("Resolved NETWORK", { net });
-  return net;
+  const raw = (process.env.NETWORK || "").toLowerCase();
+  if (raw === "mainnet" || raw === "testnet") {
+    log("Resolved NETWORK", { net: raw });
+    return raw;
+  }
+  // Treat "local" / "devnet" / anything else as localnet
+  log("Resolved NETWORK", { net: "localnet", from: raw || "(unset)" });
+  return "localnet";
 };
+
 function getLocalAppIds(): Record<string, number> {
   const raw = process.env.LOCAL_APP_IDS;
   if (!raw) return {};
@@ -45,7 +49,7 @@ interface TierDef {
   key: string;
   label: string;
   usd: number;
-  contractAppIds: { mainnet: number; testnet: number };
+  contractAppIds: { mainnet: number; testnet: number; localnet: number };
 }
 
 // Lower milestone curve for early testers
@@ -54,49 +58,49 @@ const TIERS: readonly TierDef[] = [
     key: "100",
     label: "100",
     usd: 100,
-    contractAppIds: { mainnet: 41556626, testnet: 0 },
+    contractAppIds: { mainnet: 41556626, testnet: 0, localnet: 0 },
   },
   {
     key: "250",
     label: "250",
     usd: 250,
-    contractAppIds: { mainnet: 0, testnet: 0 },
+    contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 },
   },
   {
     key: "500",
     label: "500",
     usd: 500,
-    contractAppIds: { mainnet: 0, testnet: 0 },
+    contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 },
   },
   {
     key: "1k",
     label: "1K",
     usd: 1_000,
-    contractAppIds: { mainnet: 0, testnet: 0 },
+    contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 },
   },
   {
     key: "2_5k",
     label: "2.5K",
     usd: 2_500,
-    contractAppIds: { mainnet: 0, testnet: 0 },
+    contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 },
   },
   {
     key: "5k",
     label: "5K",
     usd: 5_000,
-    contractAppIds: { mainnet: 0, testnet: 0 },
+    contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 },
   },
   {
     key: "10k",
     label: "10K",
     usd: 10_000,
-    contractAppIds: { mainnet: 0, testnet: 0 },
+    contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 },
   },
   {
     key: "50k",
     label: "50K",
     usd: 50_000,
-    contractAppIds: { mainnet: 0, testnet: 0 },
+    contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 },
   },
 ] as const;
 
@@ -110,15 +114,16 @@ const findTierById = (id: string): TierDef | undefined => {
 
 function getAppIdFor(id: string): number {
   const net = getNetwork();
-  if (net === "local") {
+  if (net === "localnet") {
     const localIds = getLocalAppIds();
     const appId = localIds[id] || 0;
-    log("getAppIdFor(local)", { id, appId });
+    log("getAppIdFor(localnet)", { id, appId });
     return appId;
   }
   const tier = findTierById(id);
-  const appId = tier ? tier.contractAppIds[net] ?? 0 : 0;
-  log("getAppIdFor", { id, net, appId });
+  const chainNet: "mainnet" | "testnet" = net; // narrow type
+  const appId = tier ? tier.contractAppIds[chainNet] ?? 0 : 0;
+  log("getAppIdFor", { id, net: chainNet, appId });
   return appId;
 }
 
@@ -171,14 +176,14 @@ async function getVoiUsdPrice(): Promise<number> {
       price = voiRows.length ? sum / voiRows.length : undefined;
     }
     if (typeof price !== "number" || !isFinite(price) || price <= 0) {
-      price = 1e-9;
+      price = 0;
     }
     _priceCache = { t: now, usd: price };
     log("VOI price (fresh)", { price });
     return price;
   } catch {
     log("VOI price fetch failed; using tiny fallback");
-    return 1e-9;
+    return 0;
   }
 }
 
@@ -232,7 +237,6 @@ const achievements: IAchievement[] = TIERS.map((t, i) => {
     id,
     name: `Original Degens - ${t.label}`,
     description: `As an early tester, reach a total wagered amount of ${t.label} USD equivalent.`,
-    // Use static file under /public/achievements/<id>.webp
     imageUrl: imageForKey(t.key),
 
     display: {
@@ -243,7 +247,6 @@ const achievements: IAchievement[] = TIERS.map((t, i) => {
       tiersTotal,
       order: tier,
       tags: ["early", "milestone", "volume"],
-      // scope omitted => global
     },
 
     contractAppIds: t.contractAppIds,
@@ -267,6 +270,10 @@ const achievements: IAchievement[] = TIERS.map((t, i) => {
       log("mint() start", { id, account });
       const appId = getAppIdFor(id);
       const has = await utils.hasAchievement(account, appId);
+
+      if (!appId) {
+        throw new Error(`No contractAppId configured for ${getNetwork()} (${id})`);
+      }
 
       log("pre-mint state", { id, appId, alreadyHas: has });
       if (has) throw new Error("Already minted");
