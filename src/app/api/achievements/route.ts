@@ -67,7 +67,11 @@ export async function GET(req: Request) {
   const achievements = await loadAchievements()
 
   // convert internal model -> API metadata (and make image URL absolute)
-  const toMeta = (a: IAchievement, owned?: boolean): One & { owned?: boolean } => {
+  const toMeta = (
+    a: IAchievement,
+    owned?: boolean,
+    eligible?: boolean
+  ): One & { owned?: boolean; eligible?: boolean } => {
     const scope =
       a.display?.scope
         ? (a.display.scope.kind === 'game'
@@ -97,8 +101,8 @@ export async function GET(req: Request) {
         : undefined,
     }
 
-    // Include 'owned' only when an account was provided (optional field)
-    return account ? { ...base, owned: !!owned } : base
+    // Include owned/eligible only when an account was provided
+    return account ? { ...base, owned: !!owned, eligible: !!eligible } : base
   }
 
   // --- SINGLE-ITEM MODE: always return the achievement by id, even if hidden ---
@@ -107,8 +111,17 @@ export async function GET(req: Request) {
     if (!a) {
       return NextResponse.json<Err>({ error: 'Not found' }, { status: 404 })
     }
-    const owned = account ? await utils.hasAchievement(account, a.getContractAppId()) : false
-    const one = toMeta(a, owned)
+
+    let owned = false
+    let eligible = false
+    if (account) {
+      [owned, eligible] = await Promise.all([
+        utils.hasAchievement(account, a.getContractAppId()).catch(() => false),
+        a.checkRequirement(account).catch(() => false),
+      ])
+    }
+
+    const one = toMeta(a, owned, eligible)
     // Our OpenAPI 200 is oneOf(single|array) — cast to satisfy TS without regenerating
     return NextResponse.json<Ok>(one as unknown as Ok)
   }
@@ -127,10 +140,22 @@ export async function GET(req: Request) {
     )
   }
 
-  // Ownership lookup (once per item)
-  const ownership = await Promise.all(
-    list.map(async (a) => (account ? utils.hasAchievement(account, a.getContractAppId()) : false))
-  )
+  // Ownership + eligibility (only if account provided)
+  let ownership: boolean[] = []
+  let eligibility: boolean[] = []
+  if (account) {
+    [ownership, eligibility] = await Promise.all([
+      Promise.all(
+        list.map(a => utils.hasAchievement(account, a.getContractAppId()).catch(() => false))
+      ),
+      Promise.all(
+        list.map(a => a.checkRequirement(account).catch(() => false))
+      ),
+    ])
+  } else {
+    ownership = new Array(list.length).fill(false)
+    eligibility = new Array(list.length).fill(false)
+  }
 
   // Hidden gating: show hidden only if owned; visible always shown
   const visibleIdx: number[] = []
@@ -140,7 +165,7 @@ export async function GET(req: Request) {
     if (show) visibleIdx.push(i)
   }
 
-  const body = visibleIdx.map((i) => toMeta(list[i], ownership[i])) as One[]
+  const body = visibleIdx.map((i) => toMeta(list[i], ownership[i], eligibility[i])) as One[]
 
   body.sort((x, y) => {
     const sx = x.display?.seriesKey ?? ''

@@ -13,7 +13,7 @@ export interface paths {
         };
         /**
          * Get achievements (list or single)
-         * @description If `id` is provided, returns a single achievement (including hidden). Otherwise returns a list. In list mode, hidden achievements are only returned if the caller owns them (provide `account`).
+         * @description If `id` is provided, returns a single achievement (including hidden). Otherwise returns a list. In list mode, hidden achievements are only returned if the caller owns them (provide `account`). When `account` is supplied, response objects also include `owned` and `eligible` flags.
          */
         get: operations["listAchievements"];
         put?: never;
@@ -89,6 +89,8 @@ export interface components {
             } | null;
             /** @description Present when the `account` query param is supplied. `true` if that account owns this achievement. */
             owned?: boolean;
+            /** @description Present when the `account` query param is supplied. `true` if that account currently meets the requirement to mint this achievement. */
+            eligible?: boolean;
         };
         ClaimRequest: {
             /** @description Voi address */

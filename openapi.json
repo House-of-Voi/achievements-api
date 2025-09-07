@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Achievements API",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "description": "Endpoints to list and claim on-chain achievements."
   },
   "servers": [
@@ -16,7 +16,7 @@
         "operationId": "listAchievements",
         "tags": ["achievements"],
         "summary": "Get achievements (list or single)",
-        "description": "If `id` is provided, returns a single achievement (including hidden). Otherwise returns a list. In list mode, hidden achievements are only returned if the caller owns them (provide `account`).",
+        "description": "If `id` is provided, returns a single achievement (including hidden). Otherwise returns a list. In list mode, hidden achievements are only returned if the caller owns them (provide `account`). When `account` is supplied, response objects also include `owned` and `eligible` flags.",
         "parameters": [
           {
             "name": "id",
@@ -29,7 +29,7 @@
             "name": "account",
             "in": "query",
             "required": false,
-            "schema": { "type": "string", "description": "Voi address to include hidden if owned (list mode)" }
+            "schema": { "type": "string", "description": "Voi address to compute owned/eligible and include hidden if owned (list mode)" }
           },
           {
             "name": "category",
@@ -70,7 +70,9 @@
                     "value": {
                       "id": "wager-warrior-100k",
                       "name": "Wager Warrior - 100K",
-                      "description": "Reach a total wagered amount of 100K USD equivalent."
+                      "description": "Reach a total wagered amount of 100K USD equivalent.",
+                      "owned": false,
+                      "eligible": true
                     }
                   },
                   "list": {
@@ -80,7 +82,8 @@
                         "id": "wager-warrior-100k",
                         "name": "Wager Warrior - 100K",
                         "description": "Reach a total wagered amount of 100K USD equivalent.",
-                        "owned": true
+                        "owned": true,
+                        "eligible": true
                       }
                     ]
                   }
@@ -184,6 +187,10 @@
           "owned": {
             "type": "boolean",
             "description": "Present when the `account` query param is supplied. `true` if that account owns this achievement."
+          },
+          "eligible": {
+            "type": "boolean",
+            "description": "Present when the `account` query param is supplied. `true` if that account currently meets the requirement to mint this achievement."
           }
         },
         "additionalProperties": false
