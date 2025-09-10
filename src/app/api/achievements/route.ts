@@ -5,7 +5,6 @@ import fs from 'fs'
 import path from 'path'
 import type { paths, components } from '@/types/openapi'
 import { absolutePublicUrl, relImageFromId } from '@/lib/utils/assets'
-import { getTotalWagerUsd as getTotalWagerUsdOriginal } from '@/lib/achievements/original-degens'
 
 const ACH_DIR = path.join(process.cwd(), 'src/lib/achievements')
 
@@ -66,15 +65,9 @@ export async function GET(req: Request) {
 
   const achievements = await loadAchievements()
 
-  // ---- shared progress context (compute once when possible) ----
+  // ---- shared progress context (left generic) ----
+  // Achievements can populate this object on first use (e.g., ctx.currentUsd).
   const ctx: Record<string, unknown> = {}
-  if (account) {
-    try {
-      ctx.currentUsd = await getTotalWagerUsdOriginal(account)
-    } catch {
-      ctx.currentUsd = 0
-    }
-  }
 
   // convert internal model -> API metadata (and make image URL absolute)
   const toMeta = (
@@ -115,7 +108,7 @@ export async function GET(req: Request) {
     return account ? { ...base, owned: !!owned, eligible: !!eligible, progress } : base
   }
 
-  // Helper to run the upgraded requirement (supports boolean or object return) without `any`
+  // Helper to run the upgraded requirement (supports boolean or object return)
   type RequirementResult = boolean | { eligible: boolean; progress?: number }
   type CheckWithCtx = (account: string, ctx?: Record<string, unknown>) => Promise<RequirementResult>
 

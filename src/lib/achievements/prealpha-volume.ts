@@ -2,8 +2,12 @@ import type { IAchievement } from "../types";
 import { AchievementCategory } from "../types";
 import * as utils from "../utils/voi";
 
+// ---------- naming ----------
+const SERIES_NAME = "Gold Rush (Pre-Alpha)";
+const SERIES_KEY = "gold_rush";
+
 // ---------- logger ----------
-const LP = "[ach:original-degens]";
+const LP = "[ach:gold-rush]";
 const nowIso = () => new Date().toISOString();
 const log = (msg: string, data?: Record<string, unknown>) =>
   data
@@ -52,21 +56,21 @@ interface TierDef {
 
 // Lower milestone curve for early testers
 const TIERS: readonly TierDef[] = [
-  { key: "100",  label: "100",  usd: 100,    contractAppIds: { mainnet: 41556626, testnet: 0, localnet: 0 } },
-  { key: "250",  label: "250",  usd: 250,    contractAppIds: { mainnet: 41585935, testnet: 0, localnet: 0 } },
-  { key: "500",  label: "500",  usd: 500,    contractAppIds: { mainnet: 41585977, testnet: 0, localnet: 0 } },
-  { key: "1k",   label: "1K",   usd: 1_000,  contractAppIds: { mainnet: 41586017, testnet: 0, localnet: 0 } },
-  { key: "2_5k", label: "2.5K", usd: 2_500,  contractAppIds: { mainnet: 41586028, testnet: 0, localnet: 0 } },
-  { key: "5k",   label: "5K",   usd: 5_000,  contractAppIds: { mainnet: 41586069, testnet: 0, localnet: 0 } },
-  { key: "10k",  label: "10K",  usd: 10_000, contractAppIds: { mainnet: 41586111, testnet: 0, localnet: 0 } },
-  { key: "50k",  label: "50K",  usd: 50_000, contractAppIds: { mainnet: 41586152, testnet: 0, localnet: 0 } },
+  { key: "100", label: "100", usd: 100, contractAppIds: { mainnet: 41556626, testnet: 0, localnet: 0 } },
+  { key: "250", label: "250", usd: 250, contractAppIds: { mainnet: 41585935, testnet: 0, localnet: 0 } },
+  { key: "500", label: "500", usd: 500, contractAppIds: { mainnet: 41585977, testnet: 0, localnet: 0 } },
+  { key: "1k", label: "1K", usd: 1_000, contractAppIds: { mainnet: 41586017, testnet: 0, localnet: 0 } },
+  { key: "2_5k", label: "2.5K", usd: 2_500, contractAppIds: { mainnet: 41586028, testnet: 0, localnet: 0 } },
+  { key: "5k", label: "5K", usd: 5_000, contractAppIds: { mainnet: 41586069, testnet: 0, localnet: 0 } },
+  { key: "10k", label: "10K", usd: 10_000, contractAppIds: { mainnet: 41586111, testnet: 0, localnet: 0 } },
+  { key: "50k", label: "50K", usd: 50_000, contractAppIds: { mainnet: 41586152, testnet: 0, localnet: 0 } },
 ] as const;
 
-const fullIdForKey = (key: string) => `original-degens-${key}`;
+const fullIdForKey = (key: string) => `${SERIES_KEY}-${key}`;
 const imageForKey = (key: string) => `/achievements/${fullIdForKey(key)}.png`;
 
 const findTierById = (id: string): TierDef | undefined => {
-  const key = id.replace(/^original-degens-/, "");
+  const key = id.replace(new RegExp(`^${SERIES_KEY}-`), "");
   return TIERS.find((t) => t.key === key);
 };
 
@@ -157,11 +161,11 @@ export async function getTotalWagerUsd(address: string): Promise<number> {
     const rows = await fetchJson<HovPlayerResponse>(url);
     totalBaseUnits = Array.isArray(rows)
       ? rows.reduce(
-          (acc, r) =>
-            acc +
-            (typeof r?.total_amount_bet === "number" ? r.total_amount_bet : 0),
-          0
-        )
+        (acc, r) =>
+          acc +
+          (typeof r?.total_amount_bet === "number" ? r.total_amount_bet : 0),
+        0
+      )
       : 0;
     log("HOV rows (hardcoded app)", {
       rows: Array.isArray(rows) ? rows.length : 0,
@@ -187,6 +191,9 @@ async function meetsTotalWagerUSD(
     typeof ctx?.currentUsd === "number"
       ? ctx.currentUsd
       : await getTotalWagerUsd(account);
+  if (ctx && typeof ctx.currentUsd !== "number") {
+    ctx.currentUsd = currentUsd; // cache for subsequent tiers this request
+  }
 
   const eligible = currentUsd >= thresholdUsd;
   const progress = thresholdUsd > 0 ? Math.min(currentUsd / thresholdUsd, 1) : 0;
@@ -203,8 +210,7 @@ async function meetsTotalWagerUSD(
 }
 
 // ---------- Exported achievements (one per tier) ----------
-// Avoid `any` by defining a local widened type and asserting to IAchievement at the end.
-type DegensAchievement = Omit<IAchievement, "checkRequirement"> & {
+type GoldRushAchievement = Omit<IAchievement, "checkRequirement"> & {
   checkRequirement(
     account: string,
     ctx?: { currentUsd?: number }
@@ -216,20 +222,20 @@ const achievements = TIERS.map((t, i) => {
   const tier = i + 1;
   const tiersTotal = TIERS.length;
 
-  const ach: DegensAchievement = {
+  const ach: GoldRushAchievement = {
     id,
-    name: `Original Degens - ${t.label}`,
-    description: `As an early tester, reach a total wagered amount of ${t.label} USD equivalent.`,
+    name: `${SERIES_NAME} - ${t.label}`,
+    description: `As a pre-alpha Original Degen, reach a total wagered amount of ${t.label} USD equivalent.`,
     imageUrl: imageForKey(t.key),
 
     display: {
       category: AchievementCategory.WAGERING,
-      series: "Original Degens",
-      seriesKey: "original_degens",
+      series: SERIES_NAME,
+      seriesKey: SERIES_KEY,
       tier,
       tiersTotal,
       order: tier,
-      tags: ["early", "milestone", "volume"],
+      tags: ["pre-alpha", "original-degen", "milestone", "volume"],
     },
 
     contractAppIds: t.contractAppIds,
@@ -272,7 +278,6 @@ const achievements = TIERS.map((t, i) => {
     hidden: false,
   };
 
-  // At runtime this object provides the widened result; for type-compat with the shared interface we assert.
   return ach as unknown as IAchievement;
 });
 
