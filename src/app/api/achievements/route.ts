@@ -7,6 +7,10 @@ import path from 'path'
 import type { paths, components } from '@/types/openapi'
 import { absolutePublicUrl, relImageFromId } from '@/lib/utils/assets'
 
+// Precompute context for Original Degens (USD progress) once per request.
+// This import is safe even if other achievements don't use it.
+import achievementsFromOriginalDegens, { getTotalWagerUsd as getTotalWagerUsdOriginal } from '@/lib/achievements/original-degens'
+
 const ACH_DIR = path.join(process.cwd(), 'src/lib/achievements')
 
 // Minimal VOI address format check (58 chars, A–Z and 2–7). No checksum.
@@ -66,12 +70,25 @@ export async function GET(req: Request) {
 
   const achievements = await loadAchievements()
 
+  // ---- shared progress context (compute once when possible) ----
+  // We may have achievements that need a common computed value.
+  // For Original Degens we compute currentUsd once; others can ignore it.
+  const ctx: Record<string, unknown> = {}
+  if (account) {
+    try {
+      ctx.currentUsd = await getTotalWagerUsdOriginal(account)
+    } catch {
+      ctx.currentUsd = 0
+    }
+  }
+
   // convert internal model -> API metadata (and make image URL absolute)
   const toMeta = (
     a: IAchievement,
     owned?: boolean,
-    eligible?: boolean
-  ): One & { owned?: boolean; eligible?: boolean } => {
+    eligible?: boolean,
+    progress?: number
+  ): One & { owned?: boolean; eligible?: boolean; progress?: number } => {
     const scope =
       a.display?.scope
         ? (a.display.scope.kind === 'game'
@@ -101,8 +118,30 @@ export async function GET(req: Request) {
         : undefined,
     }
 
-    // Include owned/eligible only when an account was provided
-    return account ? { ...base, owned: !!owned, eligible: !!eligible } : base
+    // Include owned/eligible/progress only when an account was provided
+    return account ? { ...base, owned: !!owned, eligible: !!eligible, progress } : base
+  }
+
+  // Helper to run the upgraded requirement (supports boolean or object return)
+  const runRequirement = async (a: IAchievement): Promise<{ eligible: boolean; progress: number }> => {
+    if (!account) return { eligible: false, progress: 0 }
+
+    try {
+      // We pass ctx even if older achievements ignore it; cast to keep this file drop-in.
+      const result = await (a as any).checkRequirement(account, ctx)
+
+      if (typeof result === 'boolean') {
+        return { eligible: result, progress: result ? 1 : 0 }
+      }
+      const eligible = !!result?.eligible
+      const progress =
+        typeof result?.progress === 'number'
+          ? Math.max(0, Math.min(1, result.progress))
+          : eligible ? 1 : 0
+      return { eligible, progress }
+    } catch {
+      return { eligible: false, progress: 0 }
+    }
   }
 
   // --- SINGLE-ITEM MODE: always return the achievement by id, even if hidden ---
@@ -114,14 +153,20 @@ export async function GET(req: Request) {
 
     let owned = false
     let eligible = false
+    let progress = 0
+
     if (account) {
-      [owned, eligible] = await Promise.all([
-        utils.hasAchievement(account, a.getContractAppId()).catch(() => false),
-        a.checkRequirement(account).catch(() => false),
+      const appId = a.getContractAppId()
+      const [has, req] = await Promise.all([
+        utils.hasAchievement(account, appId).catch(() => false),
+        runRequirement(a),
       ])
+      owned = has
+      eligible = req.eligible
+      progress = owned ? 1 : req.progress // owned implies 100%
     }
 
-    const one = toMeta(a, owned, eligible)
+    const one = toMeta(a, owned, eligible, progress)
     // Our OpenAPI 200 is oneOf(single|array) — cast to satisfy TS without regenerating
     return NextResponse.json<Ok>(one as unknown as Ok)
   }
@@ -140,21 +185,29 @@ export async function GET(req: Request) {
     )
   }
 
-  // Ownership + eligibility (only if account provided)
+  // Ownership + eligibility + progress (only if account provided)
   let ownership: boolean[] = []
-  let eligibility: boolean[] = []
+  let eligArr: boolean[] = []
+  let progressArr: number[] = []
+
   if (account) {
-    [ownership, eligibility] = await Promise.all([
-      Promise.all(
-        list.map(a => utils.hasAchievement(account, a.getContractAppId()).catch(() => false))
-      ),
-      Promise.all(
-        list.map(a => a.checkRequirement(account).catch(() => false))
-      ),
-    ])
+    const results = await Promise.all(
+      list.map(async (a) => {
+        const [owned, req] = await Promise.all([
+          utils.hasAchievement(account, a.getContractAppId()).catch(() => false),
+          runRequirement(a),
+        ])
+        const progress = owned ? 1 : req.progress
+        return { owned, eligible: req.eligible, progress }
+      })
+    )
+    ownership = results.map(r => r.owned)
+    eligArr   = results.map(r => r.eligible)
+    progressArr = results.map(r => r.progress)
   } else {
-    ownership = new Array(list.length).fill(false)
-    eligibility = new Array(list.length).fill(false)
+    ownership   = new Array(list.length).fill(false)
+    eligArr     = new Array(list.length).fill(false)
+    progressArr = new Array(list.length).fill(0)
   }
 
   // Hidden gating: show hidden only if owned; visible always shown
@@ -165,7 +218,9 @@ export async function GET(req: Request) {
     if (show) visibleIdx.push(i)
   }
 
-  const body = visibleIdx.map((i) => toMeta(list[i], ownership[i], eligibility[i])) as One[]
+  const body = visibleIdx.map((i) =>
+    toMeta(list[i], ownership[i], eligArr[i], progressArr[i])
+  ) as One[]
 
   body.sort((x, y) => {
     const sx = x.display?.seriesKey ?? ''

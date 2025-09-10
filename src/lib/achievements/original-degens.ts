@@ -119,7 +119,7 @@ function getAppIdFor(id: string): number {
     const appId = localIds[id] || 0;
     log("getAppIdFor(localnet)", { id, appId });
     return appId;
-  }
+    }
   const tier = findTierById(id);
   const chainNet: "mainnet" | "testnet" = net; // narrow type
   const appId = tier ? tier.contractAppIds[chainNet] ?? 0 : 0;
@@ -187,7 +187,10 @@ async function getVoiUsdPrice(): Promise<number> {
   }
 }
 
-async function getTotalWagerUsd(address: string): Promise<number> {
+/**
+ * Exported so the route can precompute once per request and pass via ctx.
+ */
+export async function getTotalWagerUsd(address: string): Promise<number> {
   const url = `${HOV_PLAYER_BASE}&address=${encodeURIComponent(address)}`;
   const priceUsd = await getVoiUsdPrice();
   let totalBaseUnits = 0;
@@ -219,21 +222,38 @@ async function getTotalWagerUsd(address: string): Promise<number> {
 // ---------- Requirement logic ----------
 async function meetsTotalWagerUSD(
   account: string,
-  thresholdUsd: number
-): Promise<boolean> {
-  const totalUsd = await getTotalWagerUsd(account);
-  const eligible = totalUsd >= thresholdUsd;
-  log("Eligibility", { account, thresholdUsd, totalUsd, eligible });
-  return eligible;
+  thresholdUsd: number,
+  ctx?: { currentUsd?: number }
+): Promise<{ eligible: boolean; progress: number }> {
+  const currentUsd =
+    typeof ctx?.currentUsd === "number"
+      ? ctx.currentUsd!
+      : await getTotalWagerUsd(account);
+
+  const eligible = currentUsd >= thresholdUsd;
+  const progress =
+    thresholdUsd > 0 ? Math.min(currentUsd / thresholdUsd, 1) : 0;
+
+  log("Eligibility", {
+    account,
+    thresholdUsd,
+    currentUsd,
+    eligible,
+    progress,
+  });
+
+  return { eligible, progress };
 }
 
 // ---------- Exported achievements (one per tier) ----------
-const achievements: IAchievement[] = TIERS.map((t, i) => {
+// NOTE: To keep this file drop-in without changing the shared IAchievement type,
+// we assign a wider shape and cast to IAchievement at the end.
+const achievements = TIERS.map((t, i) => {
   const id = fullIdForKey(t.key);
   const tier = i + 1;
   const tiersTotal = TIERS.length;
 
-  const ach: IAchievement = {
+  const ach: any = {
     id,
     name: `Original Degens - ${t.label}`,
     description: `As an early tester, reach a total wagered amount of ${t.label} USD equivalent.`,
@@ -256,23 +276,26 @@ const achievements: IAchievement[] = TIERS.map((t, i) => {
       return appId;
     },
 
-    async checkRequirement(account) {
+    // Upgraded to return { eligible, progress }, but route remains backward compatible.
+    async checkRequirement(account: string, ctx?: { currentUsd?: number }) {
       log("checkRequirement()", {
         id,
         account,
         tierLabel: t.label,
         thresholdUsd: t.usd,
       });
-      return meetsTotalWagerUSD(account, t.usd);
+      return meetsTotalWagerUSD(account, t.usd, ctx);
     },
 
-    async mint(account) {
+    async mint(account: string) {
       log("mint() start", { id, account });
       const appId = getAppIdFor(id);
       const has = await utils.hasAchievement(account, appId);
 
       if (!appId) {
-        throw new Error(`No contractAppId configured for ${getNetwork()} (${id})`);
+        throw new Error(
+          `No contractAppId configured for ${getNetwork()} (${id})`
+        );
       }
 
       log("pre-mint state", { id, appId, alreadyHas: has });
@@ -287,7 +310,7 @@ const achievements: IAchievement[] = TIERS.map((t, i) => {
     hidden: false,
   };
 
-  return ach;
+  return ach as IAchievement;
 });
 
 export default achievements;
