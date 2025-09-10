@@ -1,13 +1,14 @@
+// src/lib/achievements/prealpha-streak-days.ts
 import type { IAchievement } from "../types";
 import { AchievementCategory } from "../types";
 import * as utils from "../utils/voi";
 
 // ---------- naming ----------
-const SERIES_NAME = "Gold Rush (Pre-Alpha)";
-const SERIES_KEY = "gold_rush";
+const SERIES_NAME = "Daily Degen (Pre-Alpha)";
+const SERIES_KEY  = "prealpha_streak_days";
 
 // ---------- logger ----------
-const LP = "[ach:gold-rush]";
+const LP = "[ach:prealpha-streak-days]";
 const nowIso = () => new Date().toISOString();
 const log = (msg: string, data?: Record<string, unknown>) =>
   data
@@ -17,8 +18,6 @@ const log = (msg: string, data?: Record<string, unknown>) =>
 // ---------- External data sources ----------
 const HOV_PLAYER_BASE =
   "https://voi-mainnet-mimirapi.nftnavigator.xyz/hov/players?appId=40879920";
-const VOI_PRICE_URL = "https://voirewards.com/api/markets?token=VOI";
-const VOI_DECIMALS = 6;
 
 // ---------- Network / contract helpers ----------
 type Net = "mainnet" | "testnet";
@@ -48,26 +47,23 @@ function getLocalAppIds(): Record<string, number> {
 }
 
 interface TierDef {
-  key: string;
-  label: string;
-  usd: number;
+  key: string;    // e.g., d3
+  label: string;  // e.g., 3
+  days: number;   // threshold consecutive days
   contractAppIds: { mainnet: number; testnet: number; localnet: number };
 }
 
-// Lower milestone curve for early testers
+// 5 tiers: 3 → 30 consecutive days
 const TIERS: readonly TierDef[] = [
-  { key: "100", label: "100", usd: 100, contractAppIds: { mainnet: 41556626, testnet: 0, localnet: 0 } },
-  { key: "250", label: "250", usd: 250, contractAppIds: { mainnet: 41585935, testnet: 0, localnet: 0 } },
-  { key: "500", label: "500", usd: 500, contractAppIds: { mainnet: 41585977, testnet: 0, localnet: 0 } },
-  { key: "1k", label: "1K", usd: 1_000, contractAppIds: { mainnet: 41586017, testnet: 0, localnet: 0 } },
-  { key: "2_5k", label: "2.5K", usd: 2_500, contractAppIds: { mainnet: 41586028, testnet: 0, localnet: 0 } },
-  { key: "5k", label: "5K", usd: 5_000, contractAppIds: { mainnet: 41586069, testnet: 0, localnet: 0 } },
-  { key: "10k", label: "10K", usd: 10_000, contractAppIds: { mainnet: 41586111, testnet: 0, localnet: 0 } },
-  { key: "50k", label: "50K", usd: 50_000, contractAppIds: { mainnet: 41586152, testnet: 0, localnet: 0 } },
+  { key: "d10",  label: "10",  days: 10,  contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
+  { key: "d20",  label: "20",  days: 20,  contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
+  { key: "d30", label: "30", days: 30, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
+  { key: "d50", label: "50", days: 50, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
+  { key: "d100", label: "100", days: 100, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
 ] as const;
 
 const fullIdForKey = (key: string) => `${SERIES_KEY}-${key}`;
-const imageForKey = (key: string) => `/achievements/${fullIdForKey(key)}.png`;
+const imageForKey  = (key: string) => `/achievements/${fullIdForKey(key)}.png`;
 
 const findTierById = (id: string): TierDef | undefined => {
   const key = id.replace(new RegExp(`^${SERIES_KEY}-`), "");
@@ -109,99 +105,58 @@ async function fetchJson<T>(url: string, timeoutMs = 6000): Promise<T> {
 }
 
 // HOV API types
-type HovPlayerRow = { total_amount_bet: number };
+type HovPlayerRow = { longest_streak_days?: number };
 type HovPlayerResponse = HovPlayerRow[];
 
-// VOI price types
-type VoiMarketsResponse = {
-  aggregates?: { weightedAveragePrice?: number };
-  marketData?: Array<{ network?: string; price?: number }>;
-};
-
-let _priceCache: { t: number; usd: number } | null = null;
-const PRICE_TTL_MS = 60_000;
-
-async function getVoiUsdPrice(): Promise<number> {
-  const now = Date.now();
-  if (_priceCache && now - _priceCache.t < PRICE_TTL_MS) {
-    log("VOI price (cache hit)", { price: _priceCache.usd });
-    return _priceCache.usd;
-  }
+/**
+ * Exported so the route can precompute once per request and pass via ctx (optional).
+ */
+export async function getLongestStreakDays(address: string): Promise<number> {
+  const url = `${HOV_PLAYER_BASE}&address=${encodeURIComponent(address)}`;
   try {
-    const data = await fetchJson<VoiMarketsResponse>(VOI_PRICE_URL);
-    let price = data.aggregates?.weightedAveragePrice;
-    if (typeof price !== "number" || !isFinite(price) || price <= 0) {
-      const voiRows = (data.marketData ?? []).filter(
-        (m) => m.network?.toLowerCase() === "voi" && typeof m.price === "number"
-      );
-      const sum = voiRows.reduce((acc, m) => acc + (m.price || 0), 0);
-      price = voiRows.length ? sum / voiRows.length : undefined;
+    const rows = await fetchJson<HovPlayerResponse>(url);
+    let ld = 0;
+    if (Array.isArray(rows) && rows.length > 0) {
+      if (typeof rows[0]?.longest_streak_days === "number") {
+        ld = rows[0].longest_streak_days;
+      } else {
+        for (const r of rows) {
+          const v = typeof r?.longest_streak_days === "number" ? r.longest_streak_days : 0;
+          if (v > ld) ld = v;
+        }
+      }
     }
-    if (typeof price !== "number" || !isFinite(price) || price <= 0) {
-      price = 0;
-    }
-    _priceCache = { t: now, usd: price };
-    log("VOI price (fresh)", { price });
-    return price;
+    log("longest_streak_days", { address, longest_streak_days: ld });
+    return Number.isFinite(ld) && ld > 0 ? ld : 0;
   } catch {
-    log("VOI price fetch failed; using tiny fallback");
+    log("HOV fetch failed for longest_streak_days (treating as 0)", { url });
     return 0;
   }
 }
 
-/**
- * Exported so the route can precompute once per request and pass via ctx.
- */
-export async function getTotalWagerUsd(address: string): Promise<number> {
-  const url = `${HOV_PLAYER_BASE}&address=${encodeURIComponent(address)}`;
-  const priceUsd = await getVoiUsdPrice();
-  let totalBaseUnits = 0;
-
-  try {
-    const rows = await fetchJson<HovPlayerResponse>(url);
-    totalBaseUnits = Array.isArray(rows)
-      ? rows.reduce(
-        (acc, r) =>
-          acc +
-          (typeof r?.total_amount_bet === "number" ? r.total_amount_bet : 0),
-        0
-      )
-      : 0;
-    log("HOV rows (hardcoded app)", {
-      rows: Array.isArray(rows) ? rows.length : 0,
-      total_base_units: totalBaseUnits,
-    });
-  } catch {
-    log("HOV fetch failed (treating as 0)", { url });
-  }
-
-  const voi = totalBaseUnits / 10 ** VOI_DECIMALS;
-  const totalUsd = voi * priceUsd;
-  log("Wager totals", { baseUnits: totalBaseUnits, voi, priceUsd, totalUsd });
-  return totalUsd;
-}
-
 // ---------- Requirement logic ----------
-async function meetsTotalWagerUSD(
+async function meetsLongestStreakDays(
   account: string,
-  thresholdUsd: number,
-  ctx?: { currentUsd?: number }
+  thresholdDays: number,
+  ctx?: { longestStreakDays?: number }
 ): Promise<{ eligible: boolean; progress: number }> {
-  const currentUsd =
-    typeof ctx?.currentUsd === "number"
-      ? ctx.currentUsd
-      : await getTotalWagerUsd(account);
-  if (ctx && typeof ctx.currentUsd !== "number") {
-    ctx.currentUsd = currentUsd; // cache for subsequent tiers this request
+  const current =
+    typeof ctx?.longestStreakDays === "number"
+      ? ctx.longestStreakDays
+      : await getLongestStreakDays(account);
+
+  // cache once per request to avoid duplicate fetches across tiers
+  if (ctx && typeof ctx.longestStreakDays !== "number") {
+    ctx.longestStreakDays = current;
   }
 
-  const eligible = currentUsd >= thresholdUsd;
-  const progress = thresholdUsd > 0 ? Math.min(currentUsd / thresholdUsd, 1) : 0;
+  const eligible = current >= thresholdDays;
+  const progress = thresholdDays > 0 ? Math.min(current / thresholdDays, 1) : 0;
 
   log("Eligibility", {
     account,
-    thresholdUsd,
-    currentUsd,
+    thresholdDays,
+    longest_streak_days: current,
     eligible,
     progress,
   });
@@ -210,10 +165,10 @@ async function meetsTotalWagerUSD(
 }
 
 // ---------- Exported achievements (one per tier) ----------
-type GoldRushAchievement = Omit<IAchievement, "checkRequirement"> & {
+type DaysStreakAchievement = Omit<IAchievement, "checkRequirement"> & {
   checkRequirement(
     account: string,
-    ctx?: { currentUsd?: number }
+    ctx?: { longestStreakDays?: number }
   ): Promise<{ eligible: boolean; progress: number }>;
 };
 
@@ -222,37 +177,37 @@ const achievements = TIERS.map((t, i) => {
   const tier = i + 1;
   const tiersTotal = TIERS.length;
 
-  const ach: GoldRushAchievement = {
+  const ach: DaysStreakAchievement = {
     id,
     name: `${SERIES_NAME} - ${t.label}`,
-    description: `As a pre-alpha Original Degen, reach a total wagered amount of ${t.label} USD equivalent.`,
+    description: `Play on at least ${t.label} consecutive days during pre-alpha.`,
     imageUrl: imageForKey(t.key),
 
     display: {
-      category: AchievementCategory.WAGERING,
+      category: AchievementCategory.LOYALTY,
       series: SERIES_NAME,
       seriesKey: SERIES_KEY,
       tier,
       tiersTotal,
       order: tier,
-      tags: ["pre-alpha", "original-degen", "milestone", "volume"],
+      tags: ["pre-alpha", "original-degen", "days", "streak", "loyalty"],
     },
 
     contractAppIds: t.contractAppIds,
     getContractAppId() {
       const appId = getAppIdFor(this.id);
-      log("getContractAppId()", { id: this.id, net: getNetwork(), appId });
+      log("getContractAppId()", { id: this.id, appId });
       return appId;
     },
 
-    async checkRequirement(account: string, ctx?: { currentUsd?: number }) {
+    async checkRequirement(account: string, ctx?: { longestStreakDays?: number }) {
       log("checkRequirement()", {
         id,
         account,
         tierLabel: t.label,
-        thresholdUsd: t.usd,
+        thresholdDays: t.days,
       });
-      return meetsTotalWagerUSD(account, t.usd, ctx);
+      return meetsLongestStreakDays(account, t.days, ctx);
     },
 
     async mint(account: string) {
