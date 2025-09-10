@@ -65,6 +65,7 @@ const TIERS: readonly TierDef[] = [
     { key: "x500", label: "500x", x: 500, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
     { key: "x750", label: "750x", x: 750, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
     { key: "x1000", label: "1000x", x: 1000, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
+    { key: "x10000", label: "1000x", x: 10000, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
 ] as const;
 
 const fullIdForKey = (key: string) => `${SERIES_KEY}-${key}`;

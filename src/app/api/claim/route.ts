@@ -59,6 +59,23 @@ async function loadAchievements(): Promise<IAchievement[]> {
   return all
 }
 
+// Normalize the result of checkRequirement() so we never rely on object truthiness.
+async function getEligibility(
+  item: IAchievement,
+  account: string
+): Promise<{ eligible: boolean; progress?: number }> {
+  const res = await item.checkRequirement(account as string)
+  if (typeof res === 'boolean') return { eligible: res }
+  if (res && typeof res === 'object' && 'eligible' in res) {
+    const r = res as { eligible: unknown; progress?: unknown }
+    return {
+      eligible: !!r.eligible,
+      progress: typeof r.progress === 'number' ? r.progress : undefined,
+    }
+  }
+  return { eligible: false }
+}
+
 export async function POST(req: NextRequest) {
   type Body = paths['/api/claim']['post']['requestBody']['content']['application/json']
   type Ok = paths['/api/claim']['post']['responses']['200']['content']['application/json']
@@ -80,10 +97,10 @@ export async function POST(req: NextRequest) {
 
   // Select targets:
   // - if `requestedId` provided, only claim that one (if it exists)
-  // - else process all (as before)
+  // - else process all
   let targets: IAchievement[] = all
   if (requestedId) {
-    const one = all.find(a => a.id === requestedId)
+    const one = all.find((a) => a.id === requestedId)
     if (!one) {
       const notFound: Ok = { minted: [], errors: [{ id: requestedId, reason: 'Not found' }] }
       slog('Requested id not found', { requestedId })
@@ -107,27 +124,40 @@ export async function POST(req: NextRequest) {
 
       if (!item.enabled) {
         slog('Skip (disabled)', { id })
-        // Keep response shape consistent; only add an error if single-id was requested
+        // Only add an error if single-id was requested, to keep parity with previous behavior
         if (requestedId) result.errors.push({ id, reason: 'Disabled' })
         continue
       }
 
       const appId = item.getContractAppId()
+      slog('Pre-check', { id, account, appId })
 
-      if (await utils.hasAchievement(account, appId)) {
+      if (!appId) {
+        const reason = 'No contract appId configured for this network'
+        slog('Skip (no appId)', { id })
+        if (requestedId) result.errors.push({ id, reason })
+        continue
+      }
+
+      // Ownership check first
+      const owned = await utils.hasAchievement(account, appId)
+      slog('Owned check', { id, account, appId, owned })
+      if (owned) {
         slog('Skip (already has achievement)', { id, account, appId })
-        // Only annotate as error in single-id mode
         if (requestedId) result.errors.push({ id, reason: 'Already minted' })
         continue
       }
 
-      const eligible = await item.checkRequirement(account)
+      // Eligibility (FIX: use .eligible, not object truthiness)
+      const { eligible, progress } = await getEligibility(item, account)
+      slog('Eligibility check', { id, account, eligible, progress })
       if (!eligible) {
-        slog('Skip (not eligible)', { id, account })
+        slog('Skip (not eligible)', { id, account, progress })
         if (requestedId) result.errors.push({ id, reason: 'Not eligible' })
         continue
       }
 
+      // Mint
       const txnId = await item.mint(account)
       slog('Mint success', { id, account, txnId })
       result.minted.push({ id, txnId })
