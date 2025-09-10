@@ -58,8 +58,8 @@ export async function hasAchievement(
   const net = getNet();
   const base =
     net === "testnet"
-      ? "https://arc72-voi-testnet.nftnavigator.xyz/nft-indexer/v1"
-      : "https://arc72-voi-mainnet.nftnavigator.xyz/nft-indexer/v1";
+      ? "https://voi-testnet-mimirapi.nftnavigator.xyz/nft-indexer/v1"
+      : "https://voi-mainnet-mimirapi.nftnavigator.xyz/nft-indexer/v1";
 
   type TokenRow = { contractId: number; owner: string; isBurned?: boolean };
   type Resp = { tokens?: TokenRow[] };
