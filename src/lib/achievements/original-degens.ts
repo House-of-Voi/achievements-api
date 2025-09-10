@@ -1,4 +1,3 @@
-// src/lib/achievements/original-degens.ts
 import type { IAchievement } from "../types";
 import { AchievementCategory } from "../types";
 import * as utils from "../utils/voi";
@@ -27,7 +26,6 @@ const getNetwork = (): Network => {
     log("Resolved NETWORK", { net: raw });
     return raw;
   }
-  // Treat "local" / "devnet" / anything else as localnet
   log("Resolved NETWORK", { net: "localnet", from: raw || "(unset)" });
   return "localnet";
 };
@@ -54,54 +52,14 @@ interface TierDef {
 
 // Lower milestone curve for early testers
 const TIERS: readonly TierDef[] = [
-  {
-    key: "100",
-    label: "100",
-    usd: 100,
-    contractAppIds: { mainnet: 41556626, testnet: 0, localnet: 0 },
-  },
-  {
-    key: "250",
-    label: "250",
-    usd: 250,
-    contractAppIds: { mainnet: 41585935, testnet: 0, localnet: 0 },
-  },
-  {
-    key: "500",
-    label: "500",
-    usd: 500,
-    contractAppIds: { mainnet: 41585977, testnet: 0, localnet: 0 },
-  },
-  {
-    key: "1k",
-    label: "1K",
-    usd: 1_000,
-    contractAppIds: { mainnet: 41586017, testnet: 0, localnet: 0 },
-  },
-  {
-    key: "2_5k",
-    label: "2.5K",
-    usd: 2_500,
-    contractAppIds: { mainnet: 41586028, testnet: 0, localnet: 0 },
-  },
-  {
-    key: "5k",
-    label: "5K",
-    usd: 5_000,
-    contractAppIds: { mainnet: 41586069, testnet: 0, localnet: 0 },
-  },
-  {
-    key: "10k",
-    label: "10K",
-    usd: 10_000,
-    contractAppIds: { mainnet: 41586111, testnet: 0, localnet: 0 },
-  },
-  {
-    key: "50k",
-    label: "50K",
-    usd: 50_000,
-    contractAppIds: { mainnet: 41586152, testnet: 0, localnet: 0 },
-  },
+  { key: "100",  label: "100",  usd: 100,    contractAppIds: { mainnet: 41556626, testnet: 0, localnet: 0 } },
+  { key: "250",  label: "250",  usd: 250,    contractAppIds: { mainnet: 41585935, testnet: 0, localnet: 0 } },
+  { key: "500",  label: "500",  usd: 500,    contractAppIds: { mainnet: 41585977, testnet: 0, localnet: 0 } },
+  { key: "1k",   label: "1K",   usd: 1_000,  contractAppIds: { mainnet: 41586017, testnet: 0, localnet: 0 } },
+  { key: "2_5k", label: "2.5K", usd: 2_500,  contractAppIds: { mainnet: 41586028, testnet: 0, localnet: 0 } },
+  { key: "5k",   label: "5K",   usd: 5_000,  contractAppIds: { mainnet: 41586069, testnet: 0, localnet: 0 } },
+  { key: "10k",  label: "10K",  usd: 10_000, contractAppIds: { mainnet: 41586111, testnet: 0, localnet: 0 } },
+  { key: "50k",  label: "50K",  usd: 50_000, contractAppIds: { mainnet: 41586152, testnet: 0, localnet: 0 } },
 ] as const;
 
 const fullIdForKey = (key: string) => `original-degens-${key}`;
@@ -119,9 +77,9 @@ function getAppIdFor(id: string): number {
     const appId = localIds[id] || 0;
     log("getAppIdFor(localnet)", { id, appId });
     return appId;
-    }
+  }
   const tier = findTierById(id);
-  const chainNet: "mainnet" | "testnet" = net; // narrow type
+  const chainNet: "mainnet" | "testnet" = net;
   const appId = tier ? tier.contractAppIds[chainNet] ?? 0 : 0;
   log("getAppIdFor", { id, net: chainNet, appId });
   return appId;
@@ -227,12 +185,11 @@ async function meetsTotalWagerUSD(
 ): Promise<{ eligible: boolean; progress: number }> {
   const currentUsd =
     typeof ctx?.currentUsd === "number"
-      ? ctx.currentUsd!
+      ? ctx.currentUsd
       : await getTotalWagerUsd(account);
 
   const eligible = currentUsd >= thresholdUsd;
-  const progress =
-    thresholdUsd > 0 ? Math.min(currentUsd / thresholdUsd, 1) : 0;
+  const progress = thresholdUsd > 0 ? Math.min(currentUsd / thresholdUsd, 1) : 0;
 
   log("Eligibility", {
     account,
@@ -246,14 +203,20 @@ async function meetsTotalWagerUSD(
 }
 
 // ---------- Exported achievements (one per tier) ----------
-// NOTE: To keep this file drop-in without changing the shared IAchievement type,
-// we assign a wider shape and cast to IAchievement at the end.
+// Avoid `any` by defining a local widened type and asserting to IAchievement at the end.
+type DegensAchievement = Omit<IAchievement, "checkRequirement"> & {
+  checkRequirement(
+    account: string,
+    ctx?: { currentUsd?: number }
+  ): Promise<{ eligible: boolean; progress: number }>;
+};
+
 const achievements = TIERS.map((t, i) => {
   const id = fullIdForKey(t.key);
   const tier = i + 1;
   const tiersTotal = TIERS.length;
 
-  const ach: any = {
+  const ach: DegensAchievement = {
     id,
     name: `Original Degens - ${t.label}`,
     description: `As an early tester, reach a total wagered amount of ${t.label} USD equivalent.`,
@@ -276,7 +239,6 @@ const achievements = TIERS.map((t, i) => {
       return appId;
     },
 
-    // Upgraded to return { eligible, progress }, but route remains backward compatible.
     async checkRequirement(account: string, ctx?: { currentUsd?: number }) {
       log("checkRequirement()", {
         id,
@@ -310,7 +272,8 @@ const achievements = TIERS.map((t, i) => {
     hidden: false,
   };
 
-  return ach as IAchievement;
+  // At runtime this object provides the widened result; for type-compat with the shared interface we assert.
+  return ach as unknown as IAchievement;
 });
 
 export default achievements;
