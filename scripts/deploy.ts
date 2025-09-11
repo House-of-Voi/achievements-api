@@ -99,8 +99,8 @@ async function loadAllAchievements(
 // Generate metadata URI for the achievement
 function generateMetadataURI(achievement: IAchievement): string {
   const baseUrl =
-    process.env.METADATA_BASE_URL || "https://achievements-api.example.com";
-  return `${baseUrl}/metadata/${achievement.id}.json`;
+    process.env.METADATA_BASE_URL || "'https://achievements.houseofvoi.com";
+  return `${baseUrl}/api/achievements?id=${achievement.id}`;
 }
 
 // Check if achievement needs deployment (has no app ID for current network)

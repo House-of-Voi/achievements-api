@@ -53,13 +53,13 @@ interface TierDef {
   contractAppIds: { mainnet: number; testnet: number; localnet: number };
 }
 
-// 5 tiers: 3 → 15 consecutive wins
+// 5 tiers: 3 → 20 consecutive wins
 const TIERS: readonly TierDef[] = [
-  { key: "s5",  label: "5",  streak: 5,  contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
-  { key: "s7",  label: "7",  streak: 7,  contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
-  { key: "s10",  label: "10",  streak: 10,  contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
-  { key: "s15", label: "15", streak: 15, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
-  { key: "s20", label: "20", streak: 20, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
+  { key: "s5",  label: "5",  streak: 5,  contractAppIds: { mainnet: 42405725, testnet: 0, localnet: 0 } },
+  { key: "s7",  label: "7",  streak: 7,  contractAppIds: { mainnet: 42405880, testnet: 0, localnet: 0 } },
+  { key: "s10",  label: "10",  streak: 10,  contractAppIds: { mainnet: 42406103, testnet: 0, localnet: 0 } },
+  { key: "s15", label: "15", streak: 15, contractAppIds: { mainnet: 42406310, testnet: 0, localnet: 0 } },
+  { key: "s20", label: "20", streak: 20, contractAppIds: { mainnet: 42406516, testnet: 0, localnet: 0 } },
 ] as const;
 
 const fullIdForKey = (key: string) => `${SERIES_KEY}-${key}`;

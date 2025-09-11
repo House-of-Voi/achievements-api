@@ -55,11 +55,11 @@ interface TierDef {
 
 // 5 tiers: 3 → 30 consecutive days
 const TIERS: readonly TierDef[] = [
-  { key: "d10",  label: "10",  days: 10,  contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
-  { key: "d20",  label: "20",  days: 20,  contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
-  { key: "d30", label: "30", days: 30, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
-  { key: "d50", label: "50", days: 50, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
-  { key: "d100", label: "100", days: 100, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
+  { key: "d10",  label: "10",  days: 10,  contractAppIds: { mainnet: 42404316, testnet: 0, localnet: 0 } },
+  { key: "d20",  label: "20",  days: 20,  contractAppIds: { mainnet: 42404542, testnet: 0, localnet: 0 } },
+  { key: "d30", label: "30", days: 30, contractAppIds: { mainnet: 42404767, testnet: 0, localnet: 0 } },
+  { key: "d50", label: "50", days: 50, contractAppIds: { mainnet: 42405009, testnet: 0, localnet: 0 } },
+  { key: "d100", label: "100", days: 100, contractAppIds: { mainnet: 42405235, testnet: 0, localnet: 0 } },
 ] as const;
 
 const fullIdForKey = (key: string) => `${SERIES_KEY}-${key}`;

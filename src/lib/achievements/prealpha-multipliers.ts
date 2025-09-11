@@ -55,17 +55,17 @@ interface TierDef {
 
 // 10 tiers: 10x → 1000x
 const TIERS: readonly TierDef[] = [
-    { key: "x10", label: "10x", x: 10, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
-    { key: "x25", label: "25x", x: 25, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
-    { key: "x50", label: "50x", x: 50, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
-    { key: "x75", label: "75x", x: 75, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
-    { key: "x100", label: "100x", x: 100, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
-    { key: "x150", label: "150x", x: 150, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
-    { key: "x250", label: "250x", x: 250, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
-    { key: "x500", label: "500x", x: 500, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
-    { key: "x750", label: "750x", x: 750, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
-    { key: "x1000", label: "1000x", x: 1000, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
-    { key: "x10000", label: "1000x", x: 10000, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
+    { key: "x10", label: "10x", x: 10, contractAppIds: { mainnet: 42397807, testnet: 0, localnet: 0 } },
+    { key: "x25", label: "25x", x: 25, contractAppIds: { mainnet: 42398534, testnet: 0, localnet: 0 } },
+    { key: "x50", label: "50x", x: 50, contractAppIds: { mainnet: 42399275, testnet: 0, localnet: 0 } },
+    { key: "x75", label: "75x", x: 75, contractAppIds: { mainnet: 42400140, testnet: 0, localnet: 0 } },
+    { key: "x100", label: "100x", x: 100, contractAppIds: { mainnet: 42400983, testnet: 0, localnet: 0 } },
+    { key: "x150", label: "150x", x: 150, contractAppIds: { mainnet: 42402148, testnet: 0, localnet: 0 } },
+    { key: "x250", label: "250x", x: 250, contractAppIds: { mainnet: 42402411, testnet: 0, localnet: 0 } },
+    { key: "x500", label: "500x", x: 500, contractAppIds: { mainnet: 42402693, testnet: 0, localnet: 0 } },
+    { key: "x750", label: "750x", x: 750, contractAppIds: { mainnet: 42402938, testnet: 0, localnet: 0 } },
+    { key: "x1000", label: "1000x", x: 1000, contractAppIds: { mainnet: 42403201, testnet: 0, localnet: 0 } },
+    { key: "x10000", label: "10000x", x: 10000, contractAppIds: { mainnet: 42403392, testnet: 0, localnet: 0 } },
 ] as const;
 
 const fullIdForKey = (key: string) => `${SERIES_KEY}-${key}`;

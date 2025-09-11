@@ -55,13 +55,13 @@ interface TierDef {
 
 // 5 tiers: 10 → 30 consecutive losses
 const TIERS: readonly TierDef[] = [
-  { key: "ls10", label: "10", streak: 10, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
-  { key: "ls15", label: "15", streak: 15, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
-  { key: "ls20", label: "20", streak: 20, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
-  { key: "ls25", label: "25", streak: 25, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
-  { key: "ls30", label: "30", streak: 30, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
-  { key: "ls50", label: "50", streak: 50, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
-  { key: "ls100", label: "100", streak: 100, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
+  { key: "ls10", label: "10", streak: 10, contractAppIds: { mainnet: 42330739, testnet: 0, localnet: 0 } },
+  { key: "ls15", label: "15", streak: 15, contractAppIds: { mainnet: 42330779, testnet: 0, localnet: 0 } },
+  { key: "ls20", label: "20", streak: 20, contractAppIds: { mainnet: 42330788, testnet: 0, localnet: 0 } },
+  { key: "ls25", label: "25", streak: 25, contractAppIds: { mainnet: 42330798, testnet: 0, localnet: 0 } },
+  { key: "ls30", label: "30", streak: 30, contractAppIds: { mainnet: 42330912, testnet: 0, localnet: 0 } },
+  { key: "ls50", label: "50", streak: 50, contractAppIds: { mainnet: 42331123, testnet: 0, localnet: 0 } },
+  { key: "ls100", label: "100", streak: 100, contractAppIds: { mainnet: 42331328, testnet: 0, localnet: 0 } },
 ] as const;
 
 const fullIdForKey = (key: string) => `${SERIES_KEY}-${key}`;
