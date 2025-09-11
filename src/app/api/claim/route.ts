@@ -15,6 +15,17 @@ const nowIso = () => new Date().toISOString()
 const slog = (msg: string, data?: Record<string, unknown>) =>
   (data ? console.log(`${LP} ${nowIso()} ${msg}`, data) : console.log(`${LP} ${nowIso()} ${msg}`))
 
+// Simple sleep
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+// Concurrency/throttle settings (env overridable)
+const CONCURRENCY_DEFAULT = 5
+const START_GAP_MS_DEFAULT = 30
+const CONCURRENCY =
+  Math.max(1, Number(process.env.HOV_CLAIM_CONCURRENCY ?? CONCURRENCY_DEFAULT)) || CONCURRENCY_DEFAULT
+const START_GAP_MS =
+  Math.max(0, Number(process.env.HOV_CLAIM_START_GAP_MS ?? START_GAP_MS_DEFAULT)) || START_GAP_MS_DEFAULT
+
 // Type-safe shape guard (no "any")
 function isAchievement(x: unknown): x is IAchievement {
   if (!x || typeof x !== 'object') return false
@@ -76,6 +87,86 @@ async function getEligibility(
   return { eligible: false }
 }
 
+// Worker that processes one achievement and mutates `result`
+async function processOne(
+  item: IAchievement,
+  account: string,
+  requestedId: string | undefined,
+  result: paths['/api/claim']['post']['responses']['200']['content']['application/json']
+) {
+  const id = (item as IAchievement)?.id ?? '(unknown)'
+  try {
+    if (!isAchievement(item)) {
+      const reason = 'Invalid achievement export (missing required methods)'
+      slog('Skip (invalid shape)', { id, reason })
+      result.errors.push({ id, reason })
+      return
+    }
+
+    if (!item.enabled) {
+      slog('Skip (disabled)', { id })
+      if (requestedId) result.errors.push({ id, reason: 'Disabled' })
+      return
+    }
+
+    const appId = item.getContractAppId()
+    slog('Pre-check', { id, account, appId })
+    if (!appId) {
+      const reason = 'No contract appId configured for this network'
+      slog('Skip (no appId)', { id })
+      if (requestedId) result.errors.push({ id, reason })
+      return
+    }
+
+    // Ownership check first
+    const owned = await utils.hasAchievement(account, appId)
+    slog('Owned check', { id, account, appId, owned })
+    if (owned) {
+      slog('Skip (already has achievement)', { id, account, appId })
+      if (requestedId) result.errors.push({ id, reason: 'Already minted' })
+      return
+    }
+
+    // Eligibility
+    const { eligible, progress } = await getEligibility(item, account)
+    slog('Eligibility check', { id, account, eligible, progress })
+    if (!eligible) {
+      slog('Skip (not eligible)', { id, account, progress })
+      if (requestedId) result.errors.push({ id, reason: 'Not eligible' })
+      return
+    }
+
+    // Mint
+    const txnId = await item.mint(account)
+    slog('Mint success', { id, account, txnId })
+    result.minted.push({ id, txnId })
+  } catch (e) {
+    const reason = e instanceof Error ? e.message : 'Unknown error'
+    slog('Mint error', { id, account, reason })
+    result.errors.push({ id, reason })
+  }
+}
+
+// Parallel map with a concurrency limit and small start gap between task starts
+async function mapLimit<T>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<void>,
+  startGapMs: number
+) {
+  let i = 0
+  const n = items.length
+  const workers = Array.from({ length: Math.min(limit, n) }, async () => {
+    while (true) {
+      const idx = i++
+      if (idx >= n) break
+      if (startGapMs > 0) await sleep(startGapMs) // throttle task starts
+      await fn(items[idx], idx)
+    }
+  })
+  await Promise.all(workers)
+}
+
 export async function POST(req: NextRequest) {
   type Body = paths['/api/claim']['post']['requestBody']['content']['application/json']
   type Ok = paths['/api/claim']['post']['responses']['200']['content']['application/json']
@@ -86,7 +177,12 @@ export async function POST(req: NextRequest) {
   const account = bag['account'] as string | undefined
   const requestedId = (bag['id'] as string | undefined)?.trim() || undefined
 
-  slog('Incoming claim request', { account, requestedId: requestedId ?? '(all)' })
+  slog('Incoming claim request', {
+    account,
+    requestedId: requestedId ?? '(all)',
+    concurrency: requestedId ? 1 : CONCURRENCY,
+    startGapMs: START_GAP_MS,
+  })
 
   if (!account || !algosdk.isValidAddress(account)) {
     slog('Invalid account', { account })
@@ -111,62 +207,16 @@ export async function POST(req: NextRequest) {
 
   const result: Ok = { minted: [], errors: [] }
 
-  for (const item of targets) {
-    const id = (item as IAchievement)?.id ?? '(unknown)'
-
-    try {
-      if (!isAchievement(item)) {
-        const reason = 'Invalid achievement export (missing required methods)'
-        slog('Skip (invalid shape)', { id, reason })
-        result.errors.push({ id, reason })
-        continue
-      }
-
-      if (!item.enabled) {
-        slog('Skip (disabled)', { id })
-        // Only add an error if single-id was requested, to keep parity with previous behavior
-        if (requestedId) result.errors.push({ id, reason: 'Disabled' })
-        continue
-      }
-
-      const appId = item.getContractAppId()
-      slog('Pre-check', { id, account, appId })
-
-      if (!appId) {
-        const reason = 'No contract appId configured for this network'
-        slog('Skip (no appId)', { id })
-        if (requestedId) result.errors.push({ id, reason })
-        continue
-      }
-
-      // Ownership check first
-      const owned = await utils.hasAchievement(account, appId)
-      slog('Owned check', { id, account, appId, owned })
-      if (owned) {
-        slog('Skip (already has achievement)', { id, account, appId })
-        if (requestedId) result.errors.push({ id, reason: 'Already minted' })
-        continue
-      }
-
-      // Eligibility (FIX: use .eligible, not object truthiness)
-      const { eligible, progress } = await getEligibility(item, account)
-      slog('Eligibility check', { id, account, eligible, progress })
-      if (!eligible) {
-        slog('Skip (not eligible)', { id, account, progress })
-        if (requestedId) result.errors.push({ id, reason: 'Not eligible' })
-        continue
-      }
-
-      // Mint
-      const txnId = await item.mint(account)
-      slog('Mint success', { id, account, txnId })
-      result.minted.push({ id, txnId })
-    } catch (e) {
-      const reason = e instanceof Error ? e.message : 'Unknown error'
-      slog('Mint error', { id, account, reason })
-      result.errors.push({ id, reason })
-    }
-  }
+  // Run in parallel with limit; single-id stays sequential (limit=1)
+  const limit = requestedId ? 1 : CONCURRENCY
+  await mapLimit(
+    targets,
+    limit,
+    async (item) => {
+      await processOne(item, account, requestedId, result)
+    },
+    START_GAP_MS
+  )
 
   slog('Claim summary', { minted: result.minted.length, errors: result.errors.length })
   return NextResponse.json(result)
