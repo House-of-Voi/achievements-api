@@ -1,6 +1,6 @@
 // src/lib/achievements/tournament-2025-09-13_overall.ts
 import type { IAchievement } from "../types";
-import { AchievementCategory } from "../types";
+// NOTE: AchievementCategory is a type union (no runtime import needed)
 import * as utils from "../utils/voi";
 
 /**
@@ -42,6 +42,23 @@ const log = (msg: string, data?: Record<string, unknown>) =>
   data ? console.log(`${LP} ${nowIso()} ${msg}`, data)
        : console.log(`${LP} ${nowIso()} ${msg}`);
 
+log("INIT module", {
+  filename: "tournament-2025-09-13_overall.ts",
+  tournamentId: TOURNAMENT_ID,
+  tournamentLabel: TOURNAMENT_LABEL,
+  categoryKey: CATEGORY_KEY,
+  categoryName: CATEGORY_NAME,
+  seriesKey: SERIES_KEY,
+  seriesName: SERIES_NAME,
+  appId: APP_ID,
+  startTs: START_TS,
+  endTs: END_TS,
+  limit: LIMIT,
+  minSpins: MIN_SPINS,
+  minVolMicro: MIN_VOL_MICRO,
+  leaderboardBase: LEADERBOARD_BASE,
+});
+
 // ---------- Network / contract helpers ----------
 type Net = "mainnet" | "testnet";
 type Network = Net | "localnet";
@@ -61,7 +78,7 @@ function getLocalAppIds(): Record<string, number> {
   if (!raw) return {};
   try {
     const obj = JSON.parse(raw) as Record<string, number>;
-    log("Loaded LOCAL_APP_IDS", { keys: Object.keys(obj).length });
+    log("Loaded LOCAL_APP_IDS", { keys: Object.keys(obj).length, keysList: Object.keys(obj) });
     return obj;
   } catch {
     log("Failed to parse LOCAL_APP_IDS JSON");
@@ -82,6 +99,8 @@ const PODIUM: readonly PodiumDef[] = [
   { key: "p3", label: "3rd", placement: 3, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
 ] as const;
 
+log("PODIUM defs", { podium: PODIUM.map(p => ({ key: p.key, label: p.label, placement: p.placement })) });
+
 const fullIdForKey = (key: string) => `${SERIES_KEY}-${key}`;
 const imageForKey  = (key: string) => `/achievements/${fullIdForKey(key)}.png`;
 
@@ -95,10 +114,11 @@ function getAppIdFor(id: string): number {
   if (net === "localnet") {
     const localIds = getLocalAppIds();
     const appId = localIds[id] || 0;
-    log("getAppIdFor(localnet)", { id, appId });
+    log("getAppIdFor(localnet)", { id, localIdsKeys: Object.keys(localIds), appId });
     return appId;
-    }
+  }
   const podium = findById(id);
+  log("getAppIdFor:findById", { id, derivedKey: id.replace(new RegExp(`^${SERIES_KEY}-`), ""), found: !!podium });
   const chainNet: "mainnet" | "testnet" = net;
   const appId = podium ? podium.contractAppIds[chainNet] ?? 0 : 0;
   log("getAppIdFor", { id, net: chainNet, appId });
@@ -138,7 +158,9 @@ function buildLeaderboardUrl(): string {
   qs.set("limit", String(LIMIT));
   qs.set("min_spins", String(MIN_SPINS));
   qs.set("min_volume_micro", String(MIN_VOL_MICRO));
-  return `${LEADERBOARD_BASE}?${qs.toString()}`;
+  const url = `${LEADERBOARD_BASE}?${qs.toString()}`;
+  log("buildLeaderboardUrl()", { url });
+  return url;
 }
 
 /**
@@ -146,20 +168,38 @@ function buildLeaderboardUrl(): string {
  */
 export async function getRankFromLeaderboard(address: string): Promise<number> {
   const url = buildLeaderboardUrl();
+  log("leaderboard:fetch:start", { url, address, categoryKey: CATEGORY_KEY });
   try {
     const body = await fetchJson<LeaderboardResponse>(url);
+    const keys = body?.categories ? Object.keys(body.categories) : [];
+    log("leaderboard:fetch:ok", { hasCategories: !!body?.categories, categoryKeys: keys });
+
     const table = body?.categories?.[CATEGORY_KEY];
     if (!Array.isArray(table) || table.length === 0) {
-      log("No rows for category", { categoryKey: CATEGORY_KEY });
+      log("leaderboard:table:empty", { categoryKey: CATEGORY_KEY });
       return 0;
     }
+    log("leaderboard:table:size", { categoryKey: CATEGORY_KEY, rows: table.length });
+
+    // Peek first 5 rows for sanity
+    log("leaderboard:table:head", {
+      head: table.slice(0, 5).map(r => ({ who: r?.who, rank: r?.rank })),
+    });
+
     const row = table.find(r => typeof r?.who === "string" && r.who === address);
     const rank = row?.rank ?? 0;
     const valid = typeof rank === "number" && rank > 0 ? Math.floor(rank) : 0;
-    log("resolved rank", { categoryKey: CATEGORY_KEY, address, rank: valid });
+
+    log("leaderboard:resolved-rank", {
+      categoryKey: CATEGORY_KEY,
+      address,
+      found: !!row,
+      rank: valid,
+    });
     return valid;
-  } catch {
-    log("Leaderboard fetch failed (treating as 0)", { url: buildLeaderboardUrl() });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    log("leaderboard:fetch:error", { url, msg });
     return 0;
   }
 }
@@ -212,7 +252,8 @@ const achievements = PODIUM.map((p, i) => {
     imageUrl: imageForKey(p.key),
 
     display: {
-      category: AchievementCategory.TOURNAMENT,
+      // IMPORTANT: API expects a string literal, not an enum value
+      category: "tournament",
       series: SERIES_NAME,
       seriesKey: SERIES_KEY,
       tier,
@@ -258,7 +299,10 @@ const achievements = PODIUM.map((p, i) => {
     hidden: false,
   };
 
+  log("ACH constructed", { id, name: ach.name, imageUrl: ach.imageUrl, display: ach.display });
   return ach as unknown as IAchievement;
 });
+
+log("ACH export", { count: achievements.length, ids: achievements.map(a => a.id) });
 
 export default achievements;
