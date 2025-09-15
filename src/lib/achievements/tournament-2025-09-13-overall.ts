@@ -18,19 +18,19 @@ const TOURNAMENT_LABEL = "Weekend Tournament 2025-09-13";
 // Valid keys based on your payload:
 //   "overall" | "volume" | "rtp" | "win_streak" | "biggest_win" | "total_won" | "losing_streak"
 const CATEGORY_NAME = "Overall";
-const CATEGORY_KEY  = "overall";
+const CATEGORY_KEY = "overall";
 
 // Hard coded time window and filters for this tournament
-const APP_ID        = 40879920;
-const START_TS      = "2025-09-13T00:00:00Z";
-const END_TS        = "2025-09-15T03:59:59Z";
-const LIMIT         = 100;
-const MIN_SPINS     = 500;
+const APP_ID = 40879920;
+const START_TS = "2025-09-13T00:00:00Z";
+const END_TS = "2025-09-15T03:59:59Z";
+const LIMIT = 100;
+const MIN_SPINS = 500;
 const MIN_VOL_MICRO = 25_000_000_000;
 
 // Series labels include the tournament id to keep assets and ids unique
 const SERIES_NAME = `${TOURNAMENT_LABEL} – ${CATEGORY_NAME}`;
-const SERIES_KEY  = `tournament_${TOURNAMENT_ID}_${CATEGORY_KEY}`;
+const SERIES_KEY = `tournament_${TOURNAMENT_ID}_${CATEGORY_KEY}`;
 
 // Leaderboard base (the only thing not hard coded into the window itself)
 const LEADERBOARD_BASE = "https://voi-mainnet-mimirapi.nftnavigator.xyz/hov/leaderboard";
@@ -40,7 +40,7 @@ const LP = `[ach:tournament:${TOURNAMENT_ID}:${CATEGORY_KEY}]`;
 const nowIso = () => new Date().toISOString();
 const log = (msg: string, data?: Record<string, unknown>) =>
   data ? console.log(`${LP} ${nowIso()} ${msg}`, data)
-       : console.log(`${LP} ${nowIso()} ${msg}`);
+    : console.log(`${LP} ${nowIso()} ${msg}`);
 
 // ---------- Network / contract helpers ----------
 type Net = "mainnet" | "testnet";
@@ -83,7 +83,7 @@ const PODIUM: readonly PodiumDef[] = [
 ] as const;
 
 const fullIdForKey = (key: string) => `${SERIES_KEY}-${key}`;
-const imageForKey  = (key: string) => `/achievements/${fullIdForKey(key)}.png`;
+const imageForKey = (key: string) => `/achievements/${fullIdForKey(key)}.png`;
 
 const findById = (id: string): PodiumDef | undefined => {
   const key = id.replace(new RegExp(`^${SERIES_KEY}-`), "");
@@ -97,7 +97,7 @@ function getAppIdFor(id: string): number {
     const appId = localIds[id] || 0;
     log("getAppIdFor(localnet)", { id, appId });
     return appId;
-    }
+  }
   const podium = findById(id);
   const chainNet: "mainnet" | "testnet" = net;
   const appId = podium ? podium.contractAppIds[chainNet] ?? 0 : 0;
@@ -168,32 +168,33 @@ export async function getRankFromLeaderboard(address: string): Promise<number> {
 async function meetsPodiumPlacement(
   account: string,
   targetPlacement: 1 | 2 | 3,
-  ctx?: Record<string, unknown>     // <= was { leaderboardRank?: number }
+  ctx?: Record<string, unknown>
 ): Promise<{ eligible: boolean; progress: number }> {
-  const CTX_KEY = `lbRank:${SERIES_KEY}`; // namespaced cache key
+  const CTX_KEY = `lbRank:${SERIES_KEY}`.replace(/\s/g, ""); // ensure no spaces
+
+  // Use a typed view over ctx (no `any`)
+  const store = ctx as Record<string, number> | undefined;
 
   const cached =
-    typeof ctx?.[CTX_KEY as keyof typeof ctx] === "number"
-      ? (ctx![CTX_KEY as keyof typeof ctx] as number)
-      : undefined;
+    store && typeof store[CTX_KEY] === "number" ? store[CTX_KEY] : undefined;
 
-  const current = typeof cached === "number"
-    ? cached
-    : await getRankFromLeaderboard(account);
+  const current =
+    typeof cached === "number" ? cached : await getRankFromLeaderboard(account);
 
-  if (ctx && typeof cached !== "number") {
-    (ctx as any)[CTX_KEY] = current; // store per series/category
+  if (store && typeof cached !== "number") {
+    store[CTX_KEY] = current; // typed write, still on the shared ctx object
   }
 
   const eligible = current === targetPlacement;
   const progress = eligible ? 1 : 0;
   return { eligible, progress };
 }
+
 // ---------- exported achievements (1st/2nd/3rd) ----------
 type TournamentAchievement = Omit<IAchievement, "checkRequirement"> & {
   checkRequirement(
     account: string,
-    ctx?: Record<string, unknown>     // <= was { leaderboardRank?: number }
+    ctx?: Record<string, unknown>
   ): Promise<{ eligible: boolean; progress: number }>;
 };
 
@@ -225,7 +226,7 @@ const achievements = PODIUM.map((p, i) => {
       return appId;
     },
 
-    async checkRequirement(account: string, ctx?: { leaderboardRank?: number }) {
+    async checkRequirement(account: string, ctx?: Record<string, unknown>) {
       log("checkRequirement()", {
         id,
         tournamentId: TOURNAMENT_ID,
