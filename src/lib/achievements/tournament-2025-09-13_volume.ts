@@ -168,35 +168,32 @@ export async function getRankFromLeaderboard(address: string): Promise<number> {
 async function meetsPodiumPlacement(
   account: string,
   targetPlacement: 1 | 2 | 3,
-  ctx?: { leaderboardRank?: number }
+  ctx?: Record<string, unknown>     // <= was { leaderboardRank?: number }
 ): Promise<{ eligible: boolean; progress: number }> {
-  const current =
-    typeof ctx?.leaderboardRank === "number"
-      ? ctx.leaderboardRank
-      : await getRankFromLeaderboard(account);
+  const CTX_KEY = `lbRank:${SERIES_KEY}`; // namespaced cache key
 
-  if (ctx && typeof ctx.leaderboardRank !== "number") {
-    ctx.leaderboardRank = current;
+  const cached =
+    typeof ctx?.[CTX_KEY as keyof typeof ctx] === "number"
+      ? (ctx![CTX_KEY as keyof typeof ctx] as number)
+      : undefined;
+
+  const current = typeof cached === "number"
+    ? cached
+    : await getRankFromLeaderboard(account);
+
+  if (ctx && typeof cached !== "number") {
+    (ctx as any)[CTX_KEY] = current; // store per series/category
   }
 
   const eligible = current === targetPlacement;
   const progress = eligible ? 1 : 0;
-  log("Eligibility", {
-    tournamentId: TOURNAMENT_ID,
-    categoryKey: CATEGORY_KEY,
-    account,
-    targetPlacement,
-    currentRank: current,
-    eligible,
-  });
   return { eligible, progress };
 }
-
 // ---------- exported achievements (1st/2nd/3rd) ----------
 type TournamentAchievement = Omit<IAchievement, "checkRequirement"> & {
   checkRequirement(
     account: string,
-    ctx?: { leaderboardRank?: number }
+    ctx?: Record<string, unknown>     // <= was { leaderboardRank?: number }
   ): Promise<{ eligible: boolean; progress: number }>;
 };
 
