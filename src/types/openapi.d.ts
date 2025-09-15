@@ -59,7 +59,7 @@ export interface components {
             imageUrl?: string | null;
             display?: {
                 /** @enum {string} */
-                category?: "wagering" | "wins" | "losses" | "loyalty" | "lp" | "community" | "game";
+                category?: "wagering" | "wins" | "losses" | "loyalty" | "lp" | "community" | "game" | "tournament";
                 /** @example Wager Warrior */
                 series?: string;
                 /** @example wager_warrior */
@@ -135,7 +135,7 @@ export interface operations {
                 /** @description Exact achievement id. If present, the response body is a single object (hidden allowed). */
                 id?: string;
                 account?: string;
-                category?: "wagering" | "wins" | "losses" | "loyalty" | "lp" | "community" | "game";
+                category?: "wagering" | "wins" | "losses" | "loyalty" | "lp" | "community" | "game" | "tournament";
                 seriesKey?: string;
                 game?: string;
             };

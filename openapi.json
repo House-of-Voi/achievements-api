@@ -37,7 +37,7 @@
             "required": false,
             "schema": {
               "type": "string",
-              "enum": ["wagering","wins","losses","loyalty","lp","community","game"]
+              "enum": ["wagering","wins","losses","loyalty","lp","community","game", "tournament"]
             }
           },
           {
@@ -165,7 +165,7 @@
             "properties": {
               "category": {
                 "type": "string",
-                "enum": ["wagering","wins","losses","loyalty","lp","community","game"]
+                "enum": ["wagering","wins","losses","loyalty","lp","community","game", "tournament"]
               },
               "series": { "type": "string", "example": "Wager Warrior" },
               "seriesKey": { "type": "string", "example": "wager_warrior" },

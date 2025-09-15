@@ -106,7 +106,7 @@ export async function GET(req: Request) {
   type Category = NonNullable<QueryRaw['category']>
 
   const CAT_VALUES: readonly Category[] =
-    ['wagering','wins','losses','loyalty','lp','community','game'] as const
+    ['wagering','wins','losses','loyalty','lp','community','game', 'tournament'] as const
   const parseCategory = (v: string | null): Category | undefined =>
     CAT_VALUES.includes(v as Category) ? (v as Category) : undefined
 
