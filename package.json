@@ -18,6 +18,8 @@
   },
   "dependencies": {
     "@algorandfoundation/algokit-utils": "^6.2.1",
+    "@upstash/redis": "^1.35.4",
+    "@vercel/kv": "^3.0.0",
     "algosdk": "^2.11.0",
     "next": "15.5.2",
     "rapidoc": "^9.3.8",
