@@ -94,9 +94,9 @@ interface PodiumDef {
 }
 
 const PODIUM: readonly PodiumDef[] = [
-  { key: "p1", label: "1st", placement: 1, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
-  { key: "p2", label: "2nd", placement: 2, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
-  { key: "p3", label: "3rd", placement: 3, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
+  { key: "p1", label: "1st", placement: 1, contractAppIds: { mainnet: 45730556, testnet: 0, localnet: 0 } },
+  { key: "p2", label: "2nd", placement: 2, contractAppIds: { mainnet: 45730564, testnet: 0, localnet: 0 } },
+  { key: "p3", label: "3rd", placement: 3, contractAppIds: { mainnet: 45730574, testnet: 0, localnet: 0 } },
 ] as const;
 
 log("PODIUM defs", { podium: PODIUM.map(p => ({ key: p.key, label: p.label, placement: p.placement })) });

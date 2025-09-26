@@ -77,9 +77,9 @@ interface PodiumDef {
 }
 
 const PODIUM: readonly PodiumDef[] = [
-    { key: "p1", label: "1st", placement: 1, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
-    { key: "p2", label: "2nd", placement: 2, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
-    { key: "p3", label: "3rd", placement: 3, contractAppIds: { mainnet: 0, testnet: 0, localnet: 0 } },
+    { key: "p1", label: "1st", placement: 1, contractAppIds: { mainnet: 45730527, testnet: 0, localnet: 0 } },
+    { key: "p2", label: "2nd", placement: 2, contractAppIds: { mainnet: 45730536, testnet: 0, localnet: 0 } },
+    { key: "p3", label: "3rd", placement: 3, contractAppIds: { mainnet: 45730545, testnet: 0, localnet: 0 } },
 ] as const;
 
 const fullIdForKey = (key: string) => `${SERIES_KEY}-${key}`;
